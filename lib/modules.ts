@@ -11,14 +11,16 @@ const makeCornerConnectors = (w: number, d: number) => [
   { id: "S" as const, x: w / 2, y: d, nx: 0, ny: 1 },
 ];
 
-// Corner stable connectors: only S connector at 10ft from left (center of 12ft blank)
+// Corner stable connectors: S connector at 10ft from left (center of 12ft blank), W connector on left side (door side)
 const makeCornerStableConnectors = (w: number, d: number) => [
   { id: "S" as const, x: 10, y: d, nx: 0, ny: 1 }, // 10ft from left, 6ft from right, bottom edge
+  { id: "W" as const, x: 0, y: d / 2, nx: -1, ny: 0 }, // Left side, center of depth (door side)
 ];
 
-// RH Corner stable connectors: only S connector at 6ft from left (center of 12ft blank on left side)
+// RH Corner stable connectors: S connector at 6ft from left (center of 12ft blank on left side), E connector on right side (door side)
 const makeRHCornerStableConnectors = (w: number, d: number) => [
   { id: "S" as const, x: 6, y: d, nx: 0, ny: 1 }, // 6ft from left, 10ft from right, bottom edge
+  { id: "E" as const, x: w, y: d / 2, nx: 1, ny: 0 }, // Right side, center of depth (door side)
 ];
 
 // Standard stable layout: 1ft blank + 4ft door + Xft blank + 2ft window + 1ft blank

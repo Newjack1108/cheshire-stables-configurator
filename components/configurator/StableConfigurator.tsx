@@ -1199,14 +1199,27 @@ export default function StableConfigurator() {
       return null;
     }
 
-    // If snapped to connector, calculate position
+    // If snapped to connector, calculate position using same logic as attach()
     if (snappedConnector) {
       const targetUnit = units.find((u) => u.uid === snappedConnector.uid);
       if (targetUnit) {
         const targetMod = getModule(targetUnit.moduleId);
-        const targetConn = targetMod.connectors.find((c) => c.id === snappedConnector.connId);
-        if (targetConn) {
-          const aW = connectorWorld(targetUnit, targetMod, targetConn);
+        
+        // Try all available connectors on the target unit, not just the one specified
+        // This allows us to find the best compatible match (same logic as attach())
+        let bestOverall: {
+          rot: Rotation;
+          conn: ConnectorId;
+          x: number;
+          y: number;
+          score: number;
+        } | null = null;
+
+        for (const targetConnCandidate of targetMod.connectors) {
+          // Skip if connector is already used
+          if (isUsed(targetUnit.uid, targetConnCandidate.id)) continue;
+
+          const aW = connectorWorld(targetUnit, targetMod, targetConnCandidate);
           
           // Find best rotation and connector match
           let best: { rot: Rotation; conn: ConnectorId; x: number; y: number; score: number } | null = null;
@@ -1214,20 +1227,29 @@ export default function StableConfigurator() {
             for (const c of m.connectors) {
               const p = rotatePoint(c.x, c.y, m.widthFt, m.depthFt, rot);
               const v = rotateVec(c.nx, c.ny, rot);
+              // Dot product: -1 means opposite directions (perfect match)
+              // We want the most negative dot product (closest to -1)
               const dot = v.nx * aW.nx + v.ny * aW.ny;
-              const score = -dot;
               const x = aW.x - p.x;
               const y = aW.y - p.y;
-              if (!best || score < best.score) {
-                best = { rot, conn: c.id, x, y, score };
+              // Only consider if dot product is significantly negative (opposite-facing, dot < -0.7)
+              // This ensures we only match truly opposite-facing connectors
+              if (dot < -0.7 && (!best || dot < best.score)) {
+                best = { rot, conn: c.id, x, y, score: dot };
               }
             }
           }
-          if (best) {
-            previewX = best.x;
-            previewY = best.y;
-            previewRot = best.rot;
+          
+          // Keep track of the best match across all target connectors
+          if (best && (!bestOverall || best.score < bestOverall.score)) {
+            bestOverall = best;
           }
+        }
+        
+        if (bestOverall) {
+          previewX = bestOverall.x;
+          previewY = bestOverall.y;
+          previewRot = bestOverall.rot;
         }
       }
     }
@@ -1240,6 +1262,8 @@ export default function StableConfigurator() {
     const isValid = snappedConnector ? true : isValidPosition(m.id, previewX, previewY, previewRot, excludeUid);
     const previewColor = isValid ? KELLY_GREEN : "#cc0000"; // Green if valid, red if invalid
 
+    const frontFace = getFrontFace(previewRot);
+    
     return (
       <g
         transform={`translate(${previewX * FT_TO_PX}, ${previewY * FT_TO_PX})`}
@@ -1253,6 +1277,71 @@ export default function StableConfigurator() {
           height={d * FT_TO_PX}
           fill={previewColor}
         />
+        
+        {/* Roof overhang at front (3ft) - dotted line */}
+        {(() => {
+          const overhangFt = 3;
+          const overhangPx = overhangFt * FT_TO_PX;
+          
+          if (frontFace === "S") {
+            // Front is bottom edge - overhang extends downward
+            return (
+              <line
+                x1={0}
+                y1={d * FT_TO_PX + overhangPx}
+                x2={w * FT_TO_PX}
+                y2={d * FT_TO_PX + overhangPx}
+                stroke="#666"
+                strokeWidth={1}
+                strokeDasharray="4 4"
+                opacity={0.65}
+              />
+            );
+          } else if (frontFace === "N") {
+            // Front is top edge - overhang extends upward
+            return (
+              <line
+                x1={0}
+                y1={-overhangPx}
+                x2={w * FT_TO_PX}
+                y2={-overhangPx}
+                stroke="#666"
+                strokeWidth={1}
+                strokeDasharray="4 4"
+                opacity={0.65}
+              />
+            );
+          } else if (frontFace === "W") {
+            // Front is left edge - overhang extends leftward
+            return (
+              <line
+                x1={-overhangPx}
+                y1={0}
+                x2={-overhangPx}
+                y2={d * FT_TO_PX}
+                stroke="#666"
+                strokeWidth={1}
+                strokeDasharray="4 4"
+                opacity={0.65}
+              />
+            );
+          } else if (frontFace === "E") {
+            // Front is right edge - overhang extends rightward
+            return (
+              <line
+                x1={w * FT_TO_PX + overhangPx}
+                y1={0}
+                x2={w * FT_TO_PX + overhangPx}
+                y2={d * FT_TO_PX}
+                stroke="#666"
+                strokeWidth={1}
+                strokeDasharray="4 4"
+                opacity={0.65}
+              />
+            );
+          }
+          return null;
+        })()}
         
         {/* Render door and window indicators */}
         {m.frontFeatures.map((feature, idx) => {
@@ -2004,6 +2093,68 @@ export default function StableConfigurator() {
                   height={d * FT_TO_PX}
                   fill="#999"
                 />
+
+                {/* Roof overhang at front (3ft) - dotted line */}
+                {(() => {
+                  const frontFace = getFrontFace(u.rot);
+                  const overhangFt = 3;
+                  const overhangPx = overhangFt * FT_TO_PX;
+                  
+                  if (frontFace === "S") {
+                    // Front is bottom edge - overhang extends downward
+                    return (
+                      <line
+                        x1={0}
+                        y1={d * FT_TO_PX + overhangPx}
+                        x2={w * FT_TO_PX}
+                        y2={d * FT_TO_PX + overhangPx}
+                        stroke="#666"
+                        strokeWidth={1}
+                        strokeDasharray="4 4"
+                      />
+                    );
+                  } else if (frontFace === "N") {
+                    // Front is top edge - overhang extends upward
+                    return (
+                      <line
+                        x1={0}
+                        y1={-overhangPx}
+                        x2={w * FT_TO_PX}
+                        y2={-overhangPx}
+                        stroke="#666"
+                        strokeWidth={1}
+                        strokeDasharray="4 4"
+                      />
+                    );
+                  } else if (frontFace === "W") {
+                    // Front is left edge - overhang extends leftward
+                    return (
+                      <line
+                        x1={-overhangPx}
+                        y1={0}
+                        x2={-overhangPx}
+                        y2={d * FT_TO_PX}
+                        stroke="#666"
+                        strokeWidth={1}
+                        strokeDasharray="4 4"
+                      />
+                    );
+                  } else if (frontFace === "E") {
+                    // Front is right edge - overhang extends rightward
+                    return (
+                      <line
+                        x1={w * FT_TO_PX + overhangPx}
+                        y1={0}
+                        x2={w * FT_TO_PX + overhangPx}
+                        y2={d * FT_TO_PX}
+                        stroke="#666"
+                        strokeWidth={1}
+                        strokeDasharray="4 4"
+                      />
+                    );
+                  }
+                  return null;
+                })()}
 
                 {/* Render doors, windows, and openings */}
                 {m.frontFeatures.map((feature, idx) => {
