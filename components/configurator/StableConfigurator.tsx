@@ -484,11 +484,15 @@ export default function StableConfigurator() {
   }
 
   // Find nearest available connector within snap distance
-  function findNearestConnector(x: number, y: number): { uid: string; connId: ConnectorId; distance: number } | null {
+  // excludeUid: optional UID to exclude from search (useful when dragging existing unit)
+  function findNearestConnector(x: number, y: number, excludeUid?: string): { uid: string; connId: ConnectorId; distance: number } | null {
     let nearest: { uid: string; connId: ConnectorId; distance: number } | null = null;
     const snapDistFt = SNAP_DISTANCE;
 
     for (const u of units) {
+      // Skip the unit being dragged
+      if (excludeUid && u.uid === excludeUid) continue;
+      
       const m = getModule(u.moduleId);
       for (const conn of m.connectors) {
         if (isUsed(u.uid, conn.id)) continue;
@@ -498,6 +502,7 @@ export default function StableConfigurator() {
         const dy = connWorld.y - y;
         const dist = Math.sqrt(dx * dx + dy * dy);
         
+        // Strict snap: must be within 2ft (no tolerance)
         if (dist < snapDistFt && (!nearest || dist < nearest.distance)) {
           nearest = { uid: u.uid, connId: conn.id, distance: dist };
         }
@@ -508,7 +513,8 @@ export default function StableConfigurator() {
   }
 
   // Check if a module position is valid (no overlaps)
-  function isValidPosition(moduleId: string, x: number, y: number, rot: Rotation): boolean {
+  // excludeUid: optional UID to exclude from overlap check (useful when dragging existing unit)
+  function isValidPosition(moduleId: string, x: number, y: number, rot: Rotation, excludeUid?: string): boolean {
     const m = getModule(moduleId);
     const testUnit: PlacedUnit = {
       uid: "test",
@@ -522,6 +528,9 @@ export default function StableConfigurator() {
 
     // Check for overlaps with existing units
     for (const u of units) {
+      // Skip the unit being dragged (excludeUid)
+      if (excludeUid && u.uid === excludeUid) continue;
+      
       const bExisting = bbox(u, getModule(u.moduleId));
       if (overlaps(bNew, bExisting)) {
         return false;
@@ -643,6 +652,89 @@ export default function StableConfigurator() {
     setSelectedUid(newUnit.uid);
   }
 
+  // Connect existing unit to a connector
+  function connectExistingUnit(unitUid: string, targetConn: ConnectorId, targetUnitUid: string): void {
+    const unit = units.find((u) => u.uid === unitUid);
+    const targetUnit = units.find((u) => u.uid === targetUnitUid);
+    if (!unit || !targetUnit) return;
+
+    const targetMod = getModule(targetUnit.moduleId);
+    const targetConnDef = targetMod.connectors.find((c) => c.id === targetConn);
+    if (!targetConnDef) return;
+
+    if (isUsed(targetUnit.uid, targetConn)) return;
+
+    const aW = connectorWorld(targetUnit, targetMod, targetConnDef);
+    const unitMod = getModule(unit.moduleId);
+
+    // Find best rotation and connector match
+    let best: {
+      rot: Rotation;
+      conn: ConnectorId;
+      x: number;
+      y: number;
+      score: number;
+    } | null = null;
+
+    for (const rot of unitMod.rotations) {
+      for (const c of unitMod.connectors) {
+        // Skip if this connector is already used (unless it's the same connection we're replacing)
+        if (isUsed(unitUid, c.id)) {
+          // Check if it's the connection we're about to replace
+          const existingConn = connections.find(
+            (conn) => (conn.aUid === unitUid && conn.aConn === c.id) || (conn.bUid === unitUid && conn.bConn === c.id)
+          );
+          // If it's connected to a different unit, skip it
+          if (existingConn && existingConn.aUid !== targetUnitUid && existingConn.bUid !== targetUnitUid) {
+            continue;
+          }
+        }
+        
+        const p = rotatePoint(c.x, c.y, unitMod.widthFt, unitMod.depthFt, rot);
+        const v = rotateVec(c.nx, c.ny, rot);
+        const dot = v.nx * aW.nx + v.ny * aW.ny;
+        const score = -dot;
+        const x = aW.x - p.x;
+        const y = aW.y - p.y;
+        if (!best || score < best.score) {
+          best = { rot, conn: c.id, x, y, score };
+        }
+      }
+    }
+
+    if (!best) return;
+
+    // Check if the new position is valid (excluding the unit being moved)
+    if (!isValidPosition(unit.moduleId, best.x, best.y, best.rot, unitUid)) {
+      return;
+    }
+
+    // Update the unit's position and rotation
+    const updatedUnit: PlacedUnit = {
+      ...unit,
+      xFt: best.x,
+      yFt: best.y,
+      rot: best.rot,
+    };
+
+    // Remove any existing connections for this unit
+    const filteredConnections = connections.filter(
+      (c) => c.aUid !== unitUid && c.bUid !== unitUid
+    );
+
+    // Add new connection
+    const newConnection: Connection = {
+      aUid: targetUnit.uid,
+      aConn: targetConn,
+      bUid: unitUid,
+      bConn: best.conn,
+    };
+
+    setUnits(units.map((u) => (u.uid === unitUid ? updatedUnit : u)));
+    setConnections([...filteredConnections, newConnection]);
+    setSelectedUid(unitUid);
+  }
+
   function rotateSelected() {
     if (!selected) return;
     const m = getModule(selected.moduleId);
@@ -751,9 +843,13 @@ export default function StableConfigurator() {
       // Find nearest connector for snapping
       const nearest = findNearestConnector(worldPos.x, worldPos.y);
       setSnappedConnector(nearest ? { uid: nearest.uid, connId: nearest.connId } : null);
-    } else if (draggingUnitUid) {
-      // For repositioning, check for overlaps
-      setSnappedConnector(null);
+    } else if (draggingUnitUid && dragOffset) {
+      // For repositioning existing unit, check for connectors
+      // Use the unit's new position to find nearest connector (exclude the dragged unit)
+      const newX = worldPos.x - dragOffset.x;
+      const newY = worldPos.y - dragOffset.y;
+      const nearest = findNearestConnector(newX, newY, draggingUnitUid);
+      setSnappedConnector(nearest ? { uid: nearest.uid, connId: nearest.connId } : null);
     }
   }
 
@@ -784,34 +880,38 @@ export default function StableConfigurator() {
       // Reposition existing unit
       const svg = e.currentTarget;
       const worldPos = screenToWorld(svg, e.clientX, e.clientY);
-      const newX = worldPos.x - dragOffset.x;
-      const newY = worldPos.y - dragOffset.y;
       
-      const unit = units.find((u) => u.uid === draggingUnitUid);
-      if (unit) {
-        const m = getModule(unit.moduleId);
-        const newUnit: PlacedUnit = { ...unit, xFt: newX, yFt: newY };
-        const bNew = bbox(newUnit, m);
+      if (snappedConnector) {
+        // Connect to connector
+        connectExistingUnit(draggingUnitUid, snappedConnector.connId, snappedConnector.uid);
+      } else {
+        // Place in free space
+        const newX = worldPos.x - dragOffset.x;
+        const newY = worldPos.y - dragOffset.y;
         
-        // Check for overlaps
-        let hasOverlap = false;
-        for (const u of units) {
-          if (u.uid === draggingUnitUid) continue;
-          const bExisting = bbox(u, getModule(u.moduleId));
-          if (overlaps(bNew, bExisting)) {
-            hasOverlap = true;
-            break;
+        const unit = units.find((u) => u.uid === draggingUnitUid);
+        if (unit) {
+          const m = getModule(unit.moduleId);
+          
+          // Check if position is valid (excluding the dragged unit)
+          if (isValidPosition(unit.moduleId, newX, newY, unit.rot, draggingUnitUid)) {
+            const newUnit: PlacedUnit = { ...unit, xFt: newX, yFt: newY };
+            
+            // Remove any existing connections when moving to free space
+            const filteredConnections = connections.filter(
+              (c) => c.aUid !== draggingUnitUid && c.bUid !== draggingUnitUid
+            );
+            
+            setUnits(units.map((u) => (u.uid === draggingUnitUid ? newUnit : u)));
+            setConnections(filteredConnections);
           }
-        }
-        
-        if (!hasOverlap) {
-          setUnits(units.map((u) => (u.uid === draggingUnitUid ? newUnit : u)));
         }
       }
       
       setDraggingUnitUid(null);
       setDragPosition(null);
       setDragOffset(null);
+      setSnappedConnector(null);
     }
   }
 
@@ -894,8 +994,12 @@ export default function StableConfigurator() {
       if (draggingModuleId) {
         const nearest = findNearestConnector(worldPos.x, worldPos.y);
         setSnappedConnector(nearest ? { uid: nearest.uid, connId: nearest.connId } : null);
-      } else if (draggingUnitUid) {
-        setSnappedConnector(null);
+      } else if (draggingUnitUid && dragOffset) {
+        // For repositioning existing unit, check for connectors
+        const newX = worldPos.x - dragOffset.x;
+        const newY = worldPos.y - dragOffset.y;
+        const nearest = findNearestConnector(newX, newY, draggingUnitUid);
+        setSnappedConnector(nearest ? { uid: nearest.uid, connId: nearest.connId } : null);
       }
     }
 
@@ -934,27 +1038,34 @@ export default function StableConfigurator() {
         if (e.clientX >= rect.left && e.clientX <= rect.right && 
             e.clientY >= rect.top && e.clientY <= rect.bottom) {
           const worldPos = screenToWorld(svg, e.clientX, e.clientY);
+          
+          // Check for nearest connector at release position (exclude the dragged unit)
           const newX = worldPos.x - dragOffset.x;
           const newY = worldPos.y - dragOffset.y;
+          const nearest = findNearestConnector(newX, newY, draggingUnitUid);
+          const releaseSnappedConnector = nearest ? { uid: nearest.uid, connId: nearest.connId } : null;
           
-          const unit = units.find((u) => u.uid === draggingUnitUid);
-          if (unit) {
-            const m = getModule(unit.moduleId);
-            const newUnit: PlacedUnit = { ...unit, xFt: newX, yFt: newY };
-            const bNew = bbox(newUnit, m);
-            
-            let hasOverlap = false;
-            for (const u of units) {
-              if (u.uid === draggingUnitUid) continue;
-              const bExisting = bbox(u, getModule(u.moduleId));
-              if (overlaps(bNew, bExisting)) {
-                hasOverlap = true;
-                break;
+          if (releaseSnappedConnector) {
+            // Connect to connector
+            connectExistingUnit(draggingUnitUid, releaseSnappedConnector.connId, releaseSnappedConnector.uid);
+          } else {
+            // Place in free space
+            const unit = units.find((u) => u.uid === draggingUnitUid);
+            if (unit) {
+              const m = getModule(unit.moduleId);
+              
+              // Check if position is valid (excluding the dragged unit)
+              if (isValidPosition(unit.moduleId, newX, newY, unit.rot, draggingUnitUid)) {
+                const newUnit: PlacedUnit = { ...unit, xFt: newX, yFt: newY };
+                
+                // Remove any existing connections when moving to free space
+                const filteredConnections = connections.filter(
+                  (c) => c.aUid !== draggingUnitUid && c.bUid !== draggingUnitUid
+                );
+                
+                setUnits(units.map((u) => (u.uid === draggingUnitUid ? newUnit : u)));
+                setConnections(filteredConnections);
               }
-            }
-            
-            if (!hasOverlap) {
-              setUnits(units.map((u) => (u.uid === draggingUnitUid ? newUnit : u)));
             }
           }
         }
@@ -962,6 +1073,7 @@ export default function StableConfigurator() {
         setDraggingUnitUid(null);
         setDragPosition(null);
         setDragOffset(null);
+        setSnappedConnector(null);
       }
     }
 
@@ -976,17 +1088,40 @@ export default function StableConfigurator() {
 
   // Render drag preview
   function renderDragPreview() {
-    if (!draggingModuleId || !dragPosition) return null;
+    if ((!draggingModuleId && !draggingUnitUid) || !dragPosition) return null;
 
-    const m = getModule(draggingModuleId);
-    let previewX = dragPosition.x;
-    let previewY = dragPosition.y;
-    let previewRot: Rotation = 0;
+    let m: ModuleDef;
+    let previewX: number;
+    let previewY: number;
+    let previewRot: Rotation;
+    let excludeUid: string | undefined;
 
-    // If not snapped to connector, center the preview on the mouse cursor
-    if (!snappedConnector) {
-      previewX = dragPosition.x - m.widthFt / 2;
-      previewY = dragPosition.y - m.depthFt / 2;
+    if (draggingModuleId) {
+      // Dragging new module from button
+      m = getModule(draggingModuleId);
+      previewX = dragPosition.x;
+      previewY = dragPosition.y;
+      previewRot = 0;
+
+      // If not snapped to connector, center the preview on the mouse cursor
+      if (!snappedConnector) {
+        previewX = dragPosition.x - m.widthFt / 2;
+        previewY = dragPosition.y - m.depthFt / 2;
+      }
+    } else if (draggingUnitUid && dragOffset) {
+      // Dragging existing unit
+      const unit = units.find((u) => u.uid === draggingUnitUid);
+      if (!unit) return null;
+      
+      m = getModule(unit.moduleId);
+      previewRot = unit.rot;
+      excludeUid = unit.uid;
+      
+      // Calculate preview position based on mouse position and drag offset
+      previewX = dragPosition.x - dragOffset.x;
+      previewY = dragPosition.y - dragOffset.y;
+    } else {
+      return null;
     }
 
     // If snapped to connector, calculate position
@@ -1026,8 +1161,8 @@ export default function StableConfigurator() {
 
     // Check if position is valid
     // If snapped to connector, it's always valid (green)
-    // Otherwise, check for overlaps
-    const isValid = snappedConnector ? true : isValidPosition(draggingModuleId, previewX, previewY, previewRot);
+    // Otherwise, check for overlaps (excluding the dragged unit if it's an existing unit)
+    const isValid = snappedConnector ? true : isValidPosition(m.id, previewX, previewY, previewRot, excludeUid);
     const previewColor = isValid ? KELLY_GREEN : "#cc0000"; // Green if valid, red if invalid
 
     return (
@@ -1388,6 +1523,10 @@ export default function StableConfigurator() {
             const m = getModule(u.moduleId);
             const { w, d } = rotatedSize(m.widthFt, m.depthFt, u.rot);
             const isSelected = u.uid === selectedUid;
+            const isBeingDragged = draggingUnitUid === u.uid;
+            
+            // Hide unit being dragged (preview will show instead)
+            if (isBeingDragged) return null;
             
             return (
               <g
@@ -1395,7 +1534,7 @@ export default function StableConfigurator() {
                 transform={`translate(${u.xFt * FT_TO_PX}, ${u.yFt * FT_TO_PX})`}
                 onClick={() => setSelectedUid(u.uid)}
                 onMouseDown={(e) => handleUnitMouseDown(e, u)}
-                style={{ cursor: draggingUnitUid === u.uid ? "grabbing" : "grab" }}
+                style={{ cursor: "grab" }}
               >
                 {/* Main rectangle */}
                 <rect
