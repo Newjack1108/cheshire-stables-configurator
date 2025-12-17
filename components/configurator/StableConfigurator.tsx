@@ -777,22 +777,25 @@ export default function StableConfigurator() {
           // For connectors to connect, they must face opposite directions (dot product should be -1)
           // Only consider if dot product is significantly negative (opposite-facing, dot < -0.7)
           if (dot < -0.7) {
-            // Add front face preference score for standard stables
-            // Prefer rotations that keep front face in reasonable direction (avoid upside down)
-            const frontFace = getFrontFace(rot);
-            let frontFaceScore = 0;
-            if (newMod.kind === "stable") {
-              // Prefer South (0°) or East (270°) facing
-              if (frontFace === "S") frontFaceScore = 2;
-              else if (frontFace === "E") frontFaceScore = 1;
-              else if (frontFace === "W") frontFaceScore = 0.5;
-              else if (frontFace === "N") frontFaceScore = -2; // Avoid North (upside down)
-            }
+            // Use dot product as primary score (more negative is better)
+            let totalScore = dot;
             
-            // Combine dot product with front face preference
-            // Lower total score is better (more negative dot + front face preference)
-            // Front face score is added (positive = better, so subtract from dot to make score lower)
-            const totalScore = dot - (frontFaceScore * 0.15); // Weight front face preference
+            // Add front face preference as a tie-breaker for standard stables
+            // Only apply when dot products are similar (within 0.1) to avoid blocking valid connections
+            if (newMod.kind === "stable") {
+              const frontFace = getFrontFace(rot);
+              let frontFaceBonus = 0;
+              // Prefer South (0°) or East (270°) facing
+              if (frontFace === "S") frontFaceBonus = 0.1;
+              else if (frontFace === "E") frontFaceBonus = 0.05;
+              else if (frontFace === "W") frontFaceBonus = 0;
+              else if (frontFace === "N") frontFaceBonus = -0.1; // Slight penalty for North (upside down)
+              
+              // Only apply preference if no best exists yet, or if dot products are very close
+              if (!best || Math.abs(dot - best.score) < 0.1) {
+                totalScore = dot - frontFaceBonus; // Subtract bonus to make score lower (better)
+              }
+            }
             
             if (!best || totalScore < best.score) {
               best = { rot, conn: c.id, x, y, score: totalScore };
@@ -930,21 +933,25 @@ export default function StableConfigurator() {
         // For connectors to connect, they must face opposite directions (dot product should be -1)
         // Only consider if dot product is significantly negative (opposite-facing, dot < -0.7)
         if (dot < -0.7) {
-          // Add front face preference score for standard stables
-          // Prefer rotations that keep front face in reasonable direction (avoid upside down)
-          const frontFace = getFrontFace(rot);
-          let frontFaceScore = 0;
-          if (unitMod.kind === "stable") {
-            // Prefer South (0°) or East (270°) facing
-            if (frontFace === "S") frontFaceScore = 2;
-            else if (frontFace === "E") frontFaceScore = 1;
-            else if (frontFace === "W") frontFaceScore = 0.5;
-            else if (frontFace === "N") frontFaceScore = -2; // Avoid North (upside down)
-          }
+          // Use dot product as primary score (more negative is better)
+          let totalScore = dot;
           
-          // Combine dot product with front face preference
-          // Lower total score is better (more negative dot + front face preference)
-          const totalScore = dot - (frontFaceScore * 0.15); // Weight front face preference
+          // Add front face preference as a tie-breaker for standard stables
+          // Only apply when dot products are similar (within 0.1) to avoid blocking valid connections
+          if (unitMod.kind === "stable") {
+            const frontFace = getFrontFace(rot);
+            let frontFaceBonus = 0;
+            // Prefer South (0°) or East (270°) facing
+            if (frontFace === "S") frontFaceBonus = 0.1;
+            else if (frontFace === "E") frontFaceBonus = 0.05;
+            else if (frontFace === "W") frontFaceBonus = 0;
+            else if (frontFace === "N") frontFaceBonus = -0.1; // Slight penalty for North (upside down)
+            
+            // Only apply preference if no best exists yet, or if dot products are very close
+            if (!best || Math.abs(dot - best.score) < 0.1) {
+              totalScore = dot - frontFaceBonus; // Subtract bonus to make score lower (better)
+            }
+          }
           
           if (!best || totalScore < best.score) {
             best = { rot, conn: c.id, x, y, score: totalScore };
@@ -1455,19 +1462,25 @@ export default function StableConfigurator() {
               
               // Only consider if dot product is significantly negative (opposite-facing, dot < -0.7)
               if (dot < -0.7) {
-                // Add front face preference score for standard stables
-                const frontFace = getFrontFace(rot);
-                let frontFaceScore = 0;
-                if (m.kind === "stable") {
-                  // Prefer South (0°) or East (270°) facing
-                  if (frontFace === "S") frontFaceScore = 2;
-                  else if (frontFace === "E") frontFaceScore = 1;
-                  else if (frontFace === "W") frontFaceScore = 0.5;
-                  else if (frontFace === "N") frontFaceScore = -2; // Avoid North (upside down)
-                }
+                // Use dot product as primary score (more negative is better)
+                let totalScore = dot;
                 
-                // Combine dot product with front face preference
-                const totalScore = dot - (frontFaceScore * 0.15);
+                // Add front face preference as a tie-breaker for standard stables
+                // Only apply when dot products are similar (within 0.1) to avoid blocking valid connections
+                if (m.kind === "stable") {
+                  const frontFace = getFrontFace(rot);
+                  let frontFaceBonus = 0;
+                  // Prefer South (0°) or East (270°) facing
+                  if (frontFace === "S") frontFaceBonus = 0.1;
+                  else if (frontFace === "E") frontFaceBonus = 0.05;
+                  else if (frontFace === "W") frontFaceBonus = 0;
+                  else if (frontFace === "N") frontFaceBonus = -0.1; // Slight penalty for North (upside down)
+                  
+                  // Only apply preference if no best exists yet, or if dot products are very close
+                  if (!best || Math.abs(dot - best.score) < 0.1) {
+                    totalScore = dot - frontFaceBonus; // Subtract bonus to make score lower (better)
+                  }
+                }
                 
                 if (!best || totalScore < best.score) {
                   best = { rot, conn: c.id, x, y, score: totalScore };
