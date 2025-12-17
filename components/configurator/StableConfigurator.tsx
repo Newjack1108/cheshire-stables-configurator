@@ -507,6 +507,30 @@ export default function StableConfigurator() {
     return nearest;
   }
 
+  // Check if a module position is valid (no overlaps)
+  function isValidPosition(moduleId: string, x: number, y: number, rot: Rotation): boolean {
+    const m = getModule(moduleId);
+    const testUnit: PlacedUnit = {
+      uid: "test",
+      moduleId,
+      xFt: x,
+      yFt: y,
+      rot,
+      selectedExtras: [],
+    };
+    const bNew = bbox(testUnit, m);
+
+    // Check for overlaps with existing units
+    for (const u of units) {
+      const bExisting = bbox(u, getModule(u.moduleId));
+      if (overlaps(bNew, bExisting)) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
   function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUnit) {
     const sourceUnit = targetUnit || selected;
     if (!sourceUnit) return;
@@ -591,6 +615,31 @@ export default function StableConfigurator() {
         bConn: best.conn,
       },
     ]);
+    setSelectedUid(newUnit.uid);
+  }
+
+  // Place module in free space (not connected)
+  function placeModuleFree(moduleId: string, x: number, y: number): void {
+    const m = getModule(moduleId);
+    // Center the module on the mouse cursor for better UX
+    const centeredX = x - m.widthFt / 2;
+    const centeredY = y - m.depthFt / 2;
+    
+    // Check if position is valid
+    if (!isValidPosition(moduleId, centeredX, centeredY, 0)) {
+      return; // Don't place if invalid
+    }
+
+    const newUnit: PlacedUnit = {
+      uid: uid(),
+      moduleId,
+      xFt: centeredX,
+      yFt: centeredY,
+      rot: 0,
+      selectedExtras: [],
+    };
+
+    setUnits([...units, newUnit]);
     setSelectedUid(newUnit.uid);
   }
 
@@ -709,28 +758,34 @@ export default function StableConfigurator() {
   }
 
   function handleMouseUp(e: React.MouseEvent<SVGSVGElement>) {
-    if (draggingModuleId && dragPosition) {
+    if (draggingModuleId) {
       const svg = e.currentTarget;
       const worldPos = screenToWorld(svg, e.clientX, e.clientY);
       
-      if (snappedConnector) {
+      // Check for nearest connector at release position
+      const nearest = findNearestConnector(worldPos.x, worldPos.y);
+      const releaseSnappedConnector = nearest ? { uid: nearest.uid, connId: nearest.connId } : null;
+      
+      if (releaseSnappedConnector) {
         // Attach to connector
-        const targetUnit = units.find((u) => u.uid === snappedConnector.uid);
+        const targetUnit = units.find((u) => u.uid === releaseSnappedConnector.uid);
         if (targetUnit) {
-          attach(draggingModuleId, snappedConnector.connId, targetUnit);
+          attach(draggingModuleId, releaseSnappedConnector.connId, targetUnit);
         }
       } else {
-        // Place in free space (optional - could require connector attachment)
-        // For now, we'll only allow placement via connectors
+        // Place in free space if position is valid
+        placeModuleFree(draggingModuleId, worldPos.x, worldPos.y);
       }
       
       setDraggingModuleId(null);
       setDragPosition(null);
       setSnappedConnector(null);
-    } else if (draggingUnitUid && dragPosition && dragOffset) {
+    } else if (draggingUnitUid && dragOffset) {
       // Reposition existing unit
-      const newX = dragPosition.x - dragOffset.x;
-      const newY = dragPosition.y - dragOffset.y;
+      const svg = e.currentTarget;
+      const worldPos = screenToWorld(svg, e.clientX, e.clientY);
+      const newX = worldPos.x - dragOffset.x;
+      const newY = worldPos.y - dragOffset.y;
       
       const unit = units.find((u) => u.uid === draggingUnitUid);
       if (unit) {
@@ -845,7 +900,7 @@ export default function StableConfigurator() {
     }
 
     function handleDocumentMouseUp(e: MouseEvent) {
-      if (draggingModuleId && dragPosition && svgRef.current) {
+      if (draggingModuleId && svgRef.current) {
         const svg = svgRef.current;
         const rect = svg.getBoundingClientRect();
         
@@ -854,18 +909,25 @@ export default function StableConfigurator() {
             e.clientY >= rect.top && e.clientY <= rect.bottom) {
           const worldPos = screenToWorld(svg, e.clientX, e.clientY);
           
-          if (snappedConnector) {
-            const targetUnit = units.find((u) => u.uid === snappedConnector.uid);
+          // Check for nearest connector at release position
+          const nearest = findNearestConnector(worldPos.x, worldPos.y);
+          const releaseSnappedConnector = nearest ? { uid: nearest.uid, connId: nearest.connId } : null;
+          
+          if (releaseSnappedConnector) {
+            const targetUnit = units.find((u) => u.uid === releaseSnappedConnector.uid);
             if (targetUnit) {
-              attach(draggingModuleId, snappedConnector.connId, targetUnit);
+              attach(draggingModuleId, releaseSnappedConnector.connId, targetUnit);
             }
+          } else {
+            // Place in free space if position is valid
+            placeModuleFree(draggingModuleId, worldPos.x, worldPos.y);
           }
         }
         
         setDraggingModuleId(null);
         setDragPosition(null);
         setSnappedConnector(null);
-      } else if (draggingUnitUid && dragPosition && dragOffset && svgRef.current) {
+      } else if (draggingUnitUid && dragOffset && svgRef.current) {
         const svg = svgRef.current;
         const rect = svg.getBoundingClientRect();
         
@@ -921,6 +983,12 @@ export default function StableConfigurator() {
     let previewY = dragPosition.y;
     let previewRot: Rotation = 0;
 
+    // If not snapped to connector, center the preview on the mouse cursor
+    if (!snappedConnector) {
+      previewX = dragPosition.x - m.widthFt / 2;
+      previewY = dragPosition.y - m.depthFt / 2;
+    }
+
     // If snapped to connector, calculate position
     if (snappedConnector) {
       const targetUnit = units.find((u) => u.uid === snappedConnector.uid);
@@ -956,18 +1024,24 @@ export default function StableConfigurator() {
 
     const { w, d } = rotatedSize(m.widthFt, m.depthFt, previewRot);
 
+    // Check if position is valid
+    // If snapped to connector, it's always valid (green)
+    // Otherwise, check for overlaps
+    const isValid = snappedConnector ? true : isValidPosition(draggingModuleId, previewX, previewY, previewRot);
+    const previewColor = isValid ? KELLY_GREEN : "#cc0000"; // Green if valid, red if invalid
+
     return (
       <g
         transform={`translate(${previewX * FT_TO_PX}, ${previewY * FT_TO_PX})`}
         opacity={0.65}
       >
-        {/* Main rectangle - kelly green, no outline */}
+        {/* Main rectangle - green if valid, red if invalid, no outline */}
         <rect
           x={0}
           y={0}
           width={w * FT_TO_PX}
           height={d * FT_TO_PX}
-          fill={KELLY_GREEN}
+          fill={previewColor}
         />
         
         {/* Render door and window indicators */}
