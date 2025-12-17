@@ -1,5 +1,32 @@
 import { ModuleDef } from "@/components/configurator/types";
 
+// Load pricing data from JSON (with fallback)
+function loadPricing() {
+  if (typeof window === "undefined") return null;
+  try {
+    const pricing = localStorage.getItem("stable_configurator_pricing");
+    if (pricing) return JSON.parse(pricing);
+  } catch {
+    // Fallback to default pricing
+  }
+  return null;
+}
+
+// Get price for module or extra
+export function getPrice(moduleId: string, extraId?: string): number {
+  const pricing = loadPricing();
+  if (pricing) {
+    if (extraId && pricing.extras?.[extraId] !== undefined) {
+      return pricing.extras[extraId];
+    }
+    if (pricing.modules?.[moduleId] !== undefined) {
+      return pricing.modules[moduleId];
+    }
+  }
+  // Fallback to hardcoded prices in module definitions
+  return 0;
+}
+
 const makeStraightConnectors = (w: number, d: number) => [
   { id: "W" as const, x: 0, y: d / 2, nx: -1, ny: 0 },
   { id: "E" as const, x: w, y: d / 2, nx: 1, ny: 0 },

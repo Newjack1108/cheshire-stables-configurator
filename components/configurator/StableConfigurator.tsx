@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState, useEffect, useRef } from "react";
 import { MODULES } from "@/lib/modules";
+import { getAllTemplates, getTemplate, saveTemplate, LayoutTemplate, deleteTemplate } from "@/lib/data/layoutTemplates";
 import {
   rotatedSize,
   rotatePoint,
@@ -463,8 +464,170 @@ export default function StableConfigurator() {
   const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
   const [snappedConnector, setSnappedConnector] = useState<{ uid: string; connId: ConnectorId } | null>(null);
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null);
+  
+  // Zoom state
+  const [zoomLevel, setZoomLevel] = useState(1); // 1.0 = 100%
+  
+  // Layout rotation state
+  const [layoutRotation, setLayoutRotation] = useState(0); // 0, 90, 180, 270
+  
+  // Template state
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  
+  // Pre-built designs state
+  const [preBuiltDesigns, setPreBuiltDesigns] = useState<any[]>([]);
+  const [selectedDesignId, setSelectedDesignId] = useState<string>("");
 
   const selected = units.find((u) => u.uid === selectedUid);
+
+  // Rotate entire layout
+  function rotateLayout() {
+    if (units.length === 0) return;
+    
+    // Calculate center point of all units
+    let centerX = 0;
+    let centerY = 0;
+    for (const u of units) {
+      const b = bbox(u, getModule(u.moduleId));
+      centerX += b.x + b.w / 2;
+      centerY += b.y + b.d / 2;
+    }
+    centerX /= units.length;
+    centerY /= units.length;
+    
+    // Rotate each unit around the center
+    const newRotation = (layoutRotation + 90) % 360;
+    const rotationRad = (newRotation * Math.PI) / 180;
+    const cos = Math.cos(rotationRad);
+    const sin = Math.sin(rotationRad);
+    
+    const rotatedUnits = units.map((u) => {
+      const b = bbox(u, getModule(u.moduleId));
+      const unitCenterX = b.x + b.w / 2;
+      const unitCenterY = b.y + b.d / 2;
+      
+      // Translate to origin, rotate, translate back
+      const dx = unitCenterX - centerX;
+      const dy = unitCenterY - centerY;
+      const newX = centerX + dx * cos - dy * sin;
+      const newY = centerY + dx * sin + dy * cos;
+      
+      // Calculate new position (top-left corner)
+      const newUnitCenterX = newX;
+      const newUnitCenterY = newY;
+      const newXFt = newUnitCenterX - b.w / 2;
+      const newYFt = newUnitCenterY - b.d / 2;
+      
+      // Add rotation to unit's rotation
+      const newUnitRot = (u.rot + 90) % 360;
+      
+      return {
+        ...u,
+        xFt: newXFt,
+        yFt: newYFt,
+        rot: newUnitRot as Rotation,
+      };
+    });
+    
+    setUnits(rotatedUnits);
+    setLayoutRotation(newRotation);
+  }
+
+  // Load template
+  function loadTemplate(templateId: string) {
+    const template = getTemplate(templateId);
+    if (!template) {
+      // Try loading from saved templates
+      const savedTemplates = getAllTemplates();
+      const savedTemplate = savedTemplates.find((t) => t.id === templateId);
+      if (!savedTemplate) return;
+      
+      // Generate new UIDs for units and update connections
+      const uidMap = new Map<string, string>();
+      const newUnits = savedTemplate.units.map((u) => {
+        const newUid = uid();
+        uidMap.set(u.uid, newUid);
+        return { ...u, uid: newUid };
+      });
+      
+      const newConnections = savedTemplate.connections.map((c) => ({
+        aUid: uidMap.get(c.aUid) || c.aUid,
+        aConn: c.aConn,
+        bUid: uidMap.get(c.bUid) || c.bUid,
+        bConn: c.bConn,
+      }));
+      
+      setUnits(newUnits);
+      setConnections(newConnections);
+      if (newUnits.length > 0) {
+        setSelectedUid(newUnits[0].uid);
+      }
+      setSelectedTemplateId(templateId);
+      return;
+    }
+    
+    // Generate new UIDs for units and update connections
+    const uidMap = new Map<string, string>();
+    const newUnits = template.units.map((u) => {
+      const newUid = uid();
+      uidMap.set(u.uid, newUid);
+      return { ...u, uid: newUid };
+    });
+    
+    const newConnections = template.connections.map((c) => ({
+      aUid: uidMap.get(c.aUid) || c.aUid,
+      aConn: c.aConn,
+      bUid: uidMap.get(c.bUid) || c.bUid,
+      bConn: c.bConn,
+    }));
+    
+    setUnits(newUnits);
+    setConnections(newConnections);
+    if (newUnits.length > 0) {
+      setSelectedUid(newUnits[0].uid);
+    }
+    setSelectedTemplateId(templateId);
+  }
+
+  // Load pre-built design
+  function loadDesign(designId: string) {
+    const design = preBuiltDesigns.find((d) => d.id === designId);
+    if (!design) return;
+    
+    // Generate new UIDs for units and update connections
+    const uidMap = new Map<string, string>();
+    const newUnits = design.units.map((u: PlacedUnit) => {
+      const newUid = uid();
+      uidMap.set(u.uid, newUid);
+      return { ...u, uid: newUid };
+    });
+    
+    const newConnections = design.connections.map((c: Connection) => ({
+      aUid: uidMap.get(c.aUid) || c.aUid,
+      aConn: c.aConn,
+      bUid: uidMap.get(c.bUid) || c.bUid,
+      bConn: c.bConn,
+    }));
+    
+    setUnits(newUnits);
+    setConnections(newConnections);
+    if (newUnits.length > 0) {
+      setSelectedUid(newUnits[0].uid);
+    }
+    setSelectedDesignId(designId);
+  }
+
+  // Load pre-built designs from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("stable_configurator_designs");
+      if (saved) {
+        setPreBuiltDesigns(JSON.parse(saved));
+      }
+    } catch {
+      // Ignore
+    }
+  }, []);
 
   function isUsed(uid: string, conn: ConnectorId) {
     return connections.some(
@@ -610,12 +773,30 @@ export default function StableConfigurator() {
           const dot = v.nx * aW.nx + v.ny * aW.ny;
           const x = aW.x - p.x;
           const y = aW.y - p.y;
+          
           // For connectors to connect, they must face opposite directions (dot product should be -1)
-          // We want the most negative dot product (best match)
           // Only consider if dot product is significantly negative (opposite-facing, dot < -0.7)
-          // This ensures we only match truly opposite-facing connectors
-          if (dot < -0.7 && (!best || dot < best.score)) {
-            best = { rot, conn: c.id, x, y, score: dot };
+          if (dot < -0.7) {
+            // Add front face preference score for standard stables
+            // Prefer rotations that keep front face in reasonable direction (avoid upside down)
+            const frontFace = getFrontFace(rot);
+            let frontFaceScore = 0;
+            if (newMod.kind === "stable") {
+              // Prefer South (0°) or East (270°) facing
+              if (frontFace === "S") frontFaceScore = 2;
+              else if (frontFace === "E") frontFaceScore = 1;
+              else if (frontFace === "W") frontFaceScore = 0.5;
+              else if (frontFace === "N") frontFaceScore = -2; // Avoid North (upside down)
+            }
+            
+            // Combine dot product with front face preference
+            // Lower total score is better (more negative dot + front face preference)
+            // Front face score is added (positive = better, so subtract from dot to make score lower)
+            const totalScore = dot - (frontFaceScore * 0.15); // Weight front face preference
+            
+            if (!best || totalScore < best.score) {
+              best = { rot, conn: c.id, x, y, score: totalScore };
+            }
           }
         }
       }
@@ -745,12 +926,29 @@ export default function StableConfigurator() {
         const dot = v.nx * aW.nx + v.ny * aW.ny;
         const x = aW.x - p.x;
         const y = aW.y - p.y;
+        
         // For connectors to connect, they must face opposite directions (dot product should be -1)
-        // We want the most negative dot product (best match)
         // Only consider if dot product is significantly negative (opposite-facing, dot < -0.7)
-        // This ensures we only match truly opposite-facing connectors
-        if (dot < -0.7 && (!best || dot < best.score)) {
-          best = { rot, conn: c.id, x, y, score: dot };
+        if (dot < -0.7) {
+          // Add front face preference score for standard stables
+          // Prefer rotations that keep front face in reasonable direction (avoid upside down)
+          const frontFace = getFrontFace(rot);
+          let frontFaceScore = 0;
+          if (unitMod.kind === "stable") {
+            // Prefer South (0°) or East (270°) facing
+            if (frontFace === "S") frontFaceScore = 2;
+            else if (frontFace === "E") frontFaceScore = 1;
+            else if (frontFace === "W") frontFaceScore = 0.5;
+            else if (frontFace === "N") frontFaceScore = -2; // Avoid North (upside down)
+          }
+          
+          // Combine dot product with front face preference
+          // Lower total score is better (more negative dot + front face preference)
+          const totalScore = dot - (frontFaceScore * 0.15); // Weight front face preference
+          
+          if (!best || totalScore < best.score) {
+            best = { rot, conn: c.id, x, y, score: totalScore };
+          }
         }
       }
     }
@@ -999,14 +1197,36 @@ export default function StableConfigurator() {
   }
 
   const totalCost = useMemo(() => {
+    // Load pricing from localStorage if available
+    let pricing: any = null;
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("stable_configurator_pricing");
+        if (saved) pricing = JSON.parse(saved);
+      } catch {
+        // Use module defaults
+      }
+    }
+    
     let cost = 0;
     for (const u of units) {
       const m = getModule(u.moduleId);
-      cost += m.basePrice;
+      // Use pricing from localStorage if available, otherwise use module basePrice
+      if (pricing?.modules?.[u.moduleId] !== undefined) {
+        cost += pricing.modules[u.moduleId];
+      } else {
+        cost += m.basePrice;
+      }
+      
       const selectedExtras = u.selectedExtras || [];
       for (const extraId of selectedExtras) {
-        const extra = m.extras.find((e) => e.id === extraId);
-        if (extra) cost += extra.price;
+        // Use pricing from localStorage if available, otherwise use module extra price
+        if (pricing?.extras?.[extraId] !== undefined) {
+          cost += pricing.extras[extraId];
+        } else {
+          const extra = m.extras.find((e) => e.id === extraId);
+          if (extra) cost += extra.price;
+        }
       }
     }
     return cost;
@@ -1232,10 +1452,26 @@ export default function StableConfigurator() {
               const dot = v.nx * aW.nx + v.ny * aW.ny;
               const x = aW.x - p.x;
               const y = aW.y - p.y;
+              
               // Only consider if dot product is significantly negative (opposite-facing, dot < -0.7)
-              // This ensures we only match truly opposite-facing connectors
-              if (dot < -0.7 && (!best || dot < best.score)) {
-                best = { rot, conn: c.id, x, y, score: dot };
+              if (dot < -0.7) {
+                // Add front face preference score for standard stables
+                const frontFace = getFrontFace(rot);
+                let frontFaceScore = 0;
+                if (m.kind === "stable") {
+                  // Prefer South (0°) or East (270°) facing
+                  if (frontFace === "S") frontFaceScore = 2;
+                  else if (frontFace === "E") frontFaceScore = 1;
+                  else if (frontFace === "W") frontFaceScore = 0.5;
+                  else if (frontFace === "N") frontFaceScore = -2; // Avoid North (upside down)
+                }
+                
+                // Combine dot product with front face preference
+                const totalScore = dot - (frontFaceScore * 0.15);
+                
+                if (!best || totalScore < best.score) {
+                  best = { rot, conn: c.id, x, y, score: totalScore };
+                }
               }
             }
           }
@@ -1278,69 +1514,176 @@ export default function StableConfigurator() {
           fill={previewColor}
         />
         
-        {/* Roof overhang at front (3ft) - dotted line */}
+        {/* Roof overhang at front - dotted line */}
         {(() => {
-          const overhangFt = 3;
+          // For corner stables, only show 1ft overhang on door side
+          // For other modules, show full 3ft overhang
+          const isCorner = m.kind === "corner";
+          const overhangFt = isCorner ? 1 : 3;
           const overhangPx = overhangFt * FT_TO_PX;
           
-          if (frontFace === "S") {
-            // Front is bottom edge - overhang extends downward
-            return (
-              <line
-                x1={0}
-                y1={d * FT_TO_PX + overhangPx}
-                x2={w * FT_TO_PX}
-                y2={d * FT_TO_PX + overhangPx}
-                stroke="#666"
-                strokeWidth={1}
-                strokeDasharray="4 4"
-                opacity={0.65}
-              />
-            );
-          } else if (frontFace === "N") {
-            // Front is top edge - overhang extends upward
-            return (
-              <line
-                x1={0}
-                y1={-overhangPx}
-                x2={w * FT_TO_PX}
-                y2={-overhangPx}
-                stroke="#666"
-                strokeWidth={1}
-                strokeDasharray="4 4"
-                opacity={0.65}
-              />
-            );
-          } else if (frontFace === "W") {
-            // Front is left edge - overhang extends leftward
-            return (
-              <line
-                x1={-overhangPx}
-                y1={0}
-                x2={-overhangPx}
-                y2={d * FT_TO_PX}
-                stroke="#666"
-                strokeWidth={1}
-                strokeDasharray="4 4"
-                opacity={0.65}
-              />
-            );
-          } else if (frontFace === "E") {
-            // Front is right edge - overhang extends rightward
-            return (
-              <line
-                x1={w * FT_TO_PX + overhangPx}
-                y1={0}
-                x2={w * FT_TO_PX + overhangPx}
-                y2={d * FT_TO_PX}
-                stroke="#666"
-                strokeWidth={1}
-                strokeDasharray="4 4"
-                opacity={0.65}
-              />
-            );
+          if (isCorner) {
+            // Find door opening in frontFeatures
+            const doorFeature = m.frontFeatures.find((f) => f.type === "opening");
+            if (!doorFeature) return null;
+            
+            // Map door position to front face based on rotation (same logic as renderDoor)
+            let doorStart: number;
+            let doorEnd: number;
+            
+            if (frontFace === "S") {
+              // Bottom edge - left to right along width
+              doorStart = doorFeature.fromX;
+              doorEnd = doorFeature.toX;
+            } else if (frontFace === "N") {
+              // Top edge - right to left along width (reversed)
+              doorStart = m.widthFt - doorFeature.toX;
+              doorEnd = m.widthFt - doorFeature.fromX;
+            } else if (frontFace === "W") {
+              // Left edge - bottom to top along depth
+              doorStart = doorFeature.fromX;
+              doorEnd = doorFeature.toX;
+            } else {
+              // Right edge - top to bottom along depth (reversed)
+              doorStart = m.depthFt - doorFeature.toX;
+              doorEnd = m.depthFt - doorFeature.fromX;
+            }
+            
+            // Only show overhang for first 1ft from door edge
+            const overhangStart = doorStart;
+            const overhangEnd = Math.min(doorStart + 1, doorEnd);
+            
+            if (frontFace === "S") {
+              // Front is bottom edge - overhang extends downward
+              const startX = overhangStart * FT_TO_PX;
+              const endX = overhangEnd * FT_TO_PX;
+              const y = d * FT_TO_PX + overhangPx;
+              return (
+                <line
+                  x1={startX}
+                  y1={y}
+                  x2={endX}
+                  y2={y}
+                  stroke="#666"
+                  strokeWidth={1}
+                  strokeDasharray="4 4"
+                  opacity={0.65}
+                />
+              );
+            } else if (frontFace === "N") {
+              // Front is top edge - overhang extends upward
+              const startX = overhangStart * FT_TO_PX;
+              const endX = overhangEnd * FT_TO_PX;
+              const y = -overhangPx;
+              return (
+                <line
+                  x1={startX}
+                  y1={y}
+                  x2={endX}
+                  y2={y}
+                  stroke="#666"
+                  strokeWidth={1}
+                  strokeDasharray="4 4"
+                  opacity={0.65}
+                />
+              );
+            } else if (frontFace === "W") {
+              // Front is left edge - overhang extends leftward
+              const startY = overhangStart * FT_TO_PX;
+              const endY = overhangEnd * FT_TO_PX;
+              const x = -overhangPx;
+              return (
+                <line
+                  x1={x}
+                  y1={startY}
+                  x2={x}
+                  y2={endY}
+                  stroke="#666"
+                  strokeWidth={1}
+                  strokeDasharray="4 4"
+                  opacity={0.65}
+                />
+              );
+            } else if (frontFace === "E") {
+              // Front is right edge - overhang extends rightward
+              const startY = overhangStart * FT_TO_PX;
+              const endY = overhangEnd * FT_TO_PX;
+              const x = w * FT_TO_PX + overhangPx;
+              return (
+                <line
+                  x1={x}
+                  y1={startY}
+                  x2={x}
+                  y2={endY}
+                  stroke="#666"
+                  strokeWidth={1}
+                  strokeDasharray="4 4"
+                  opacity={0.65}
+                />
+              );
+            }
+            return null;
+          } else {
+            // Regular modules: full 3ft overhang
+            if (frontFace === "S") {
+              // Front is bottom edge - overhang extends downward
+              return (
+                <line
+                  x1={0}
+                  y1={d * FT_TO_PX + overhangPx}
+                  x2={w * FT_TO_PX}
+                  y2={d * FT_TO_PX + overhangPx}
+                  stroke="#666"
+                  strokeWidth={1}
+                  strokeDasharray="4 4"
+                  opacity={0.65}
+                />
+              );
+            } else if (frontFace === "N") {
+              // Front is top edge - overhang extends upward
+              return (
+                <line
+                  x1={0}
+                  y1={-overhangPx}
+                  x2={w * FT_TO_PX}
+                  y2={-overhangPx}
+                  stroke="#666"
+                  strokeWidth={1}
+                  strokeDasharray="4 4"
+                  opacity={0.65}
+                />
+              );
+            } else if (frontFace === "W") {
+              // Front is left edge - overhang extends leftward
+              return (
+                <line
+                  x1={-overhangPx}
+                  y1={0}
+                  x2={-overhangPx}
+                  y2={d * FT_TO_PX}
+                  stroke="#666"
+                  strokeWidth={1}
+                  strokeDasharray="4 4"
+                  opacity={0.65}
+                />
+              );
+            } else if (frontFace === "E") {
+              // Front is right edge - overhang extends rightward
+              return (
+                <line
+                  x1={w * FT_TO_PX + overhangPx}
+                  y1={0}
+                  x2={w * FT_TO_PX + overhangPx}
+                  y2={d * FT_TO_PX}
+                  stroke="#666"
+                  strokeWidth={1}
+                  strokeDasharray="4 4"
+                  opacity={0.65}
+                />
+              );
+            }
+            return null;
           }
-          return null;
         })()}
         
         {/* Render door and window indicators */}
@@ -1432,6 +1775,145 @@ export default function StableConfigurator() {
             <div style={{ fontSize: 36, fontWeight: 700, color: DARK_GREEN, fontFamily: "Inter, sans-serif" }}>
               £{totalCost.toLocaleString()}
             </div>
+          </div>
+        </div>
+
+        {/* Pre-built Designs Selector */}
+        {preBuiltDesigns.length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <h3 style={{ 
+              margin: "0 0 12px 0", 
+              fontSize: 18, 
+              fontWeight: 600,
+              color: "#1a1a1a",
+              fontFamily: "Inter, sans-serif"
+            }}>
+              Pre-built Designs
+            </h3>
+            <select
+              value={selectedDesignId}
+              onChange={(e) => {
+                if (e.target.value) {
+                  loadDesign(e.target.value);
+                }
+              }}
+              style={{
+                width: "100%",
+                padding: "10px 12px",
+                fontSize: 14,
+                fontFamily: "Inter, sans-serif",
+                border: "1px solid #e0e0e0",
+                borderRadius: 8,
+                backgroundColor: "white",
+                cursor: "pointer",
+                marginBottom: 8,
+              }}
+            >
+              <option value="">Select a design...</option>
+              {preBuiltDesigns.map((design) => (
+                <option key={design.id} value={design.id}>
+                  {design.name} - {design.description || "No description"}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Template Selector */}
+        <div style={{ marginBottom: 20 }}>
+          <h3 style={{ 
+            margin: "0 0 12px 0", 
+            fontSize: 18, 
+            fontWeight: 600,
+            color: "#1a1a1a",
+            fontFamily: "Inter, sans-serif"
+          }}>
+            Layout Templates
+          </h3>
+          <select
+            value={selectedTemplateId}
+            onChange={(e) => {
+              if (e.target.value) {
+                loadTemplate(e.target.value);
+              }
+            }}
+            style={{
+              width: "100%",
+              padding: "10px 12px",
+              fontSize: 14,
+              fontFamily: "Inter, sans-serif",
+              border: "1px solid #e0e0e0",
+              borderRadius: 8,
+              backgroundColor: "white",
+              cursor: "pointer",
+              marginBottom: 8,
+            }}
+          >
+            <option value="">Select a template...</option>
+            {getAllTemplates().map((template) => (
+              <option key={template.id} value={template.id}>
+                {template.name} - {template.description}
+              </option>
+            ))}
+          </select>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={() => {
+                const templateName = prompt("Enter template name:");
+                if (!templateName) return;
+                const templateDescription = prompt("Enter template description:") || "";
+                const template: LayoutTemplate = {
+                  id: `custom_${Date.now()}`,
+                  name: templateName,
+                  description: templateDescription,
+                  units: units,
+                  connections: connections,
+                };
+                saveTemplate(template);
+                alert("Template saved!");
+                setSelectedTemplateId(template.id);
+              }}
+              style={{
+                flex: 1,
+                padding: "8px 12px",
+                backgroundColor: DARK_GREEN,
+                color: "white",
+                border: "none",
+                borderRadius: 6,
+                cursor: "pointer",
+                fontSize: 13,
+                fontWeight: 600,
+                fontFamily: "Inter, sans-serif",
+                transition: "all 0.2s ease",
+              }}
+            >
+              Save Current
+            </button>
+            {selectedTemplateId && selectedTemplateId.startsWith("custom_") && (
+              <button
+                onClick={() => {
+                  if (confirm("Delete this template?")) {
+                    deleteTemplate(selectedTemplateId);
+                    setSelectedTemplateId("");
+                    alert("Template deleted!");
+                  }
+                }}
+                style={{
+                  padding: "8px 12px",
+                  backgroundColor: "#dc2626",
+                  color: "white",
+                  border: "none",
+                  borderRadius: 6,
+                  cursor: "pointer",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  fontFamily: "Inter, sans-serif",
+                  transition: "all 0.2s ease",
+                }}
+              >
+                Delete
+              </button>
+            )}
           </div>
         </div>
 
@@ -1966,20 +2448,127 @@ export default function StableConfigurator() {
 
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <div style={{ 
-          fontSize: 22, 
-          fontWeight: 700, 
-          marginBottom: 12,
-          color: "#1a1a1a",
-          fontFamily: "Inter, sans-serif",
-          letterSpacing: "-0.3px"
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 12
         }}>
-          Plan View
+          <div style={{ 
+            fontSize: 22, 
+            fontWeight: 700, 
+            color: "#1a1a1a",
+            fontFamily: "Inter, sans-serif",
+            letterSpacing: "-0.3px"
+          }}>
+            Plan View
+          </div>
+          {/* Zoom Controls */}
+          <div style={{ 
+            display: "flex", 
+            alignItems: "center", 
+            gap: 8,
+            backgroundColor: "white",
+            padding: "6px 12px",
+            borderRadius: 8,
+            border: "1px solid #e0e0e0",
+            boxShadow: "0 1px 3px rgba(0, 0, 0, 0.1)"
+          }}>
+            <button
+              onClick={() => {
+                const newZoom = Math.max(0.25, zoomLevel - 0.25);
+                setZoomLevel(newZoom);
+              }}
+              disabled={zoomLevel <= 0.25}
+              style={{
+                padding: "6px 12px",
+                backgroundColor: zoomLevel <= 0.25 ? "#e0e0e0" : DARK_GREEN,
+                color: zoomLevel <= 0.25 ? "#999" : "white",
+                border: "none",
+                borderRadius: 6,
+                cursor: zoomLevel <= 0.25 ? "not-allowed" : "pointer",
+                fontSize: 14,
+                fontWeight: 600,
+                fontFamily: "Inter, sans-serif",
+                transition: "all 0.2s ease",
+              }}
+            >
+              −
+            </button>
+            <span style={{ 
+              fontSize: 14, 
+              fontWeight: 600, 
+              color: "#1a1a1a",
+              fontFamily: "Inter, sans-serif",
+              minWidth: "50px",
+              textAlign: "center"
+            }}>
+              {Math.round(zoomLevel * 100)}%
+            </span>
+            <button
+              onClick={() => {
+                const newZoom = Math.min(4, zoomLevel + 0.25);
+                setZoomLevel(newZoom);
+              }}
+              disabled={zoomLevel >= 4}
+              style={{
+                padding: "6px 12px",
+                backgroundColor: zoomLevel >= 4 ? "#e0e0e0" : DARK_GREEN,
+                color: zoomLevel >= 4 ? "#999" : "white",
+                border: "none",
+                borderRadius: 6,
+                cursor: zoomLevel >= 4 ? "not-allowed" : "pointer",
+                fontSize: 14,
+                fontWeight: 600,
+                fontFamily: "Inter, sans-serif",
+                transition: "all 0.2s ease",
+              }}
+            >
+              +
+            </button>
+            <button
+              onClick={() => setZoomLevel(1)}
+              style={{
+                padding: "6px 12px",
+                backgroundColor: "#4a5568",
+                color: "white",
+                border: "none",
+                borderRadius: 6,
+                cursor: "pointer",
+                fontSize: 12,
+                fontWeight: 600,
+                fontFamily: "Inter, sans-serif",
+                transition: "all 0.2s ease",
+                marginLeft: 4,
+              }}
+            >
+              Reset
+            </button>
+            <button
+              onClick={rotateLayout}
+              style={{
+                padding: "6px 12px",
+                backgroundColor: "#4a5568",
+                color: "white",
+                border: "none",
+                borderRadius: 6,
+                cursor: "pointer",
+                fontSize: 12,
+                fontWeight: 600,
+                fontFamily: "Inter, sans-serif",
+                transition: "all 0.2s ease",
+                marginLeft: 8,
+              }}
+              title="Rotate entire layout 90°"
+            >
+              ↻ Rotate Layout
+            </button>
+          </div>
         </div>
         <svg
           ref={svgRef}
           width="100%"
           height="600"
-          viewBox={`${(ext.minX - 15) * FT_TO_PX} ${(ext.minY - 15) * FT_TO_PX} ${(ext.maxX - ext.minX + 30) * FT_TO_PX} ${(ext.maxY - ext.minY + 30) * FT_TO_PX}`}
+          viewBox={`${(ext.minX - 15) * FT_TO_PX / zoomLevel} ${(ext.minY - 15) * FT_TO_PX / zoomLevel} ${(ext.maxX - ext.minX + 30) * FT_TO_PX / zoomLevel} ${(ext.maxY - ext.minY + 30) * FT_TO_PX / zoomLevel}`}
           style={{ 
             border: "2px solid #d0d0d0", 
             borderRadius: 12, 
@@ -1990,6 +2579,12 @@ export default function StableConfigurator() {
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseLeave}
+          onWheel={(e) => {
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? -0.1 : 0.1;
+            const newZoom = Math.max(0.25, Math.min(4, zoomLevel + delta));
+            setZoomLevel(newZoom);
+          }}
         >
           {/* Grid */}
           <defs>
@@ -2094,66 +2689,169 @@ export default function StableConfigurator() {
                   fill="#999"
                 />
 
-                {/* Roof overhang at front (3ft) - dotted line */}
+                {/* Roof overhang at front - dotted line */}
                 {(() => {
                   const frontFace = getFrontFace(u.rot);
-                  const overhangFt = 3;
+                  // For corner stables, only show 1ft overhang on door side
+                  // For other modules, show full 3ft overhang
+                  const isCorner = m.kind === "corner";
+                  const overhangFt = isCorner ? 1 : 3;
                   const overhangPx = overhangFt * FT_TO_PX;
                   
-                  if (frontFace === "S") {
-                    // Front is bottom edge - overhang extends downward
-                    return (
-                      <line
-                        x1={0}
-                        y1={d * FT_TO_PX + overhangPx}
-                        x2={w * FT_TO_PX}
-                        y2={d * FT_TO_PX + overhangPx}
-                        stroke="#666"
-                        strokeWidth={1}
-                        strokeDasharray="4 4"
-                      />
-                    );
-                  } else if (frontFace === "N") {
-                    // Front is top edge - overhang extends upward
-                    return (
-                      <line
-                        x1={0}
-                        y1={-overhangPx}
-                        x2={w * FT_TO_PX}
-                        y2={-overhangPx}
-                        stroke="#666"
-                        strokeWidth={1}
-                        strokeDasharray="4 4"
-                      />
-                    );
-                  } else if (frontFace === "W") {
-                    // Front is left edge - overhang extends leftward
-                    return (
-                      <line
-                        x1={-overhangPx}
-                        y1={0}
-                        x2={-overhangPx}
-                        y2={d * FT_TO_PX}
-                        stroke="#666"
-                        strokeWidth={1}
-                        strokeDasharray="4 4"
-                      />
-                    );
-                  } else if (frontFace === "E") {
-                    // Front is right edge - overhang extends rightward
-                    return (
-                      <line
-                        x1={w * FT_TO_PX + overhangPx}
-                        y1={0}
-                        x2={w * FT_TO_PX + overhangPx}
-                        y2={d * FT_TO_PX}
-                        stroke="#666"
-                        strokeWidth={1}
-                        strokeDasharray="4 4"
-                      />
-                    );
+                  if (isCorner) {
+                    // Find door opening in frontFeatures
+                    const doorFeature = m.frontFeatures.find((f) => f.type === "opening");
+                    if (!doorFeature) return null;
+                    
+                    // Map door position to front face based on rotation (same logic as renderDoor)
+                    let doorStart: number;
+                    let doorEnd: number;
+                    
+                    if (frontFace === "S") {
+                      // Bottom edge - left to right along width
+                      doorStart = doorFeature.fromX;
+                      doorEnd = doorFeature.toX;
+                    } else if (frontFace === "N") {
+                      // Top edge - right to left along width (reversed)
+                      doorStart = m.widthFt - doorFeature.toX;
+                      doorEnd = m.widthFt - doorFeature.fromX;
+                    } else if (frontFace === "W") {
+                      // Left edge - bottom to top along depth
+                      doorStart = doorFeature.fromX;
+                      doorEnd = doorFeature.toX;
+                    } else {
+                      // Right edge - top to bottom along depth (reversed)
+                      doorStart = m.depthFt - doorFeature.toX;
+                      doorEnd = m.depthFt - doorFeature.fromX;
+                    }
+                    
+                    // Only show overhang for first 1ft from door edge
+                    const overhangStart = doorStart;
+                    const overhangEnd = Math.min(doorStart + 1, doorEnd);
+                    
+                    if (frontFace === "S") {
+                      // Front is bottom edge - overhang extends downward
+                      const startX = overhangStart * FT_TO_PX;
+                      const endX = overhangEnd * FT_TO_PX;
+                      const y = d * FT_TO_PX + overhangPx;
+                      return (
+                        <line
+                          x1={startX}
+                          y1={y}
+                          x2={endX}
+                          y2={y}
+                          stroke="#666"
+                          strokeWidth={1}
+                          strokeDasharray="4 4"
+                        />
+                      );
+                    } else if (frontFace === "N") {
+                      // Front is top edge - overhang extends upward
+                      const startX = overhangStart * FT_TO_PX;
+                      const endX = overhangEnd * FT_TO_PX;
+                      const y = -overhangPx;
+                      return (
+                        <line
+                          x1={startX}
+                          y1={y}
+                          x2={endX}
+                          y2={y}
+                          stroke="#666"
+                          strokeWidth={1}
+                          strokeDasharray="4 4"
+                        />
+                      );
+                    } else if (frontFace === "W") {
+                      // Front is left edge - overhang extends leftward
+                      const startY = overhangStart * FT_TO_PX;
+                      const endY = overhangEnd * FT_TO_PX;
+                      const x = -overhangPx;
+                      return (
+                        <line
+                          x1={x}
+                          y1={startY}
+                          x2={x}
+                          y2={endY}
+                          stroke="#666"
+                          strokeWidth={1}
+                          strokeDasharray="4 4"
+                        />
+                      );
+                    } else if (frontFace === "E") {
+                      // Front is right edge - overhang extends rightward
+                      const startY = overhangStart * FT_TO_PX;
+                      const endY = overhangEnd * FT_TO_PX;
+                      const x = w * FT_TO_PX + overhangPx;
+                      return (
+                        <line
+                          x1={x}
+                          y1={startY}
+                          x2={x}
+                          y2={endY}
+                          stroke="#666"
+                          strokeWidth={1}
+                          strokeDasharray="4 4"
+                        />
+                      );
+                    }
+                    return null;
+                  } else {
+                    // Regular modules: full 3ft overhang
+                    if (frontFace === "S") {
+                      // Front is bottom edge - overhang extends downward
+                      return (
+                        <line
+                          x1={0}
+                          y1={d * FT_TO_PX + overhangPx}
+                          x2={w * FT_TO_PX}
+                          y2={d * FT_TO_PX + overhangPx}
+                          stroke="#666"
+                          strokeWidth={1}
+                          strokeDasharray="4 4"
+                        />
+                      );
+                    } else if (frontFace === "N") {
+                      // Front is top edge - overhang extends upward
+                      return (
+                        <line
+                          x1={0}
+                          y1={-overhangPx}
+                          x2={w * FT_TO_PX}
+                          y2={-overhangPx}
+                          stroke="#666"
+                          strokeWidth={1}
+                          strokeDasharray="4 4"
+                        />
+                      );
+                    } else if (frontFace === "W") {
+                      // Front is left edge - overhang extends leftward
+                      return (
+                        <line
+                          x1={-overhangPx}
+                          y1={0}
+                          x2={-overhangPx}
+                          y2={d * FT_TO_PX}
+                          stroke="#666"
+                          strokeWidth={1}
+                          strokeDasharray="4 4"
+                        />
+                      );
+                    } else if (frontFace === "E") {
+                      // Front is right edge - overhang extends rightward
+                      return (
+                        <line
+                          x1={w * FT_TO_PX + overhangPx}
+                          y1={0}
+                          x2={w * FT_TO_PX + overhangPx}
+                          y2={d * FT_TO_PX}
+                          stroke="#666"
+                          strokeWidth={1}
+                          strokeDasharray="4 4"
+                        />
+                      );
+                    }
+                    return null;
                   }
-                  return null;
                 })()}
 
                 {/* Render doors, windows, and openings */}
