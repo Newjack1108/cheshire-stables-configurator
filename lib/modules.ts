@@ -27,27 +27,22 @@ export function getPrice(moduleId: string, extraId?: string): number {
   return 0;
 }
 
+// Standard building connectors: LEFT and RIGHT
 const makeStraightConnectors = (w: number, d: number) => [
-  { id: "W" as const, x: 0, y: d / 2, nx: -1, ny: 0 },
-  { id: "E" as const, x: w, y: d / 2, nx: 1, ny: 0 },
+  { id: "LEFT" as const, x: 0, y: d / 2, nx: -1, ny: 0 },
+  { id: "RIGHT" as const, x: w, y: d / 2, nx: 1, ny: 0 },
 ];
 
-const makeCornerConnectors = (w: number, d: number) => [
-  ...makeStraightConnectors(w, d),
-  { id: "N" as const, x: w / 2, y: 0, nx: 0, ny: -1 },
-  { id: "S" as const, x: w / 2, y: d, nx: 0, ny: 1 },
-];
-
-// Corner stable connectors: S connector at 10ft from left (center of 12ft blank), W connector on left side (door side)
+// Corner stable connectors: BACK connector at 10ft from left (center of 12ft blank), DOOR_SIDE_LEFT connector on left side
 const makeCornerStableConnectors = (w: number, d: number) => [
-  { id: "S" as const, x: 10, y: d, nx: 0, ny: 1 }, // 10ft from left, 6ft from right, bottom edge
-  { id: "W" as const, x: 0, y: d / 2, nx: -1, ny: 0 }, // Left side, center of depth (door side)
+  { id: "BACK" as const, x: 10, y: d, nx: 0, ny: 1 }, // 10ft from left, 6ft from right, bottom edge
+  { id: "DOOR_SIDE_LEFT" as const, x: 0, y: d / 2, nx: -1, ny: 0 }, // Left side, center of depth (door side)
 ];
 
-// RH Corner stable connectors: S connector at 6ft from left (center of 12ft blank on left side), E connector on right side (door side)
+// RH Corner stable connectors: BACK connector at 6ft from left (center of 12ft blank on left side), DOOR_SIDE_RIGHT connector on right side
 const makeRHCornerStableConnectors = (w: number, d: number) => [
-  { id: "S" as const, x: 6, y: d, nx: 0, ny: 1 }, // 6ft from left, 10ft from right, bottom edge
-  { id: "E" as const, x: w, y: d / 2, nx: 1, ny: 0 }, // Right side, center of depth (door side)
+  { id: "BACK" as const, x: 6, y: d, nx: 0, ny: 1 }, // 6ft from left, 10ft from right, bottom edge
+  { id: "DOOR_SIDE_RIGHT" as const, x: w, y: d / 2, nx: 1, ny: 0 }, // Right side, center of depth (door side)
 ];
 
 // Standard stable layout: 1ft blank + 4ft door + Xft blank + 2ft window + 1ft blank

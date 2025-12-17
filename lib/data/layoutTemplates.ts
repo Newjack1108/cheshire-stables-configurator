@@ -32,8 +32,8 @@ export const DEFAULT_TEMPLATES: LayoutTemplate[] = [
       { uid: "stable2", moduleId: "stable_12x12", xFt: 0, yFt: 12, rot: 0, selectedExtras: [] },
     ],
     connections: [
-      { aUid: "corner1", aConn: "E", bUid: "stable1", bConn: "W" },
-      { aUid: "corner1", aConn: "S", bUid: "stable2", bConn: "N" },
+      { aUid: "corner1", aConn: "DOOR_SIDE_LEFT", bUid: "stable1", bConn: "LEFT" },
+      { aUid: "corner1", aConn: "BACK", bUid: "stable2", bConn: "LEFT" },
     ],
   },
   {
@@ -61,9 +61,9 @@ export const DEFAULT_TEMPLATES: LayoutTemplate[] = [
       { uid: "u3", moduleId: "stable_12x12", xFt: 12, yFt: 12, rot: 180, selectedExtras: [] },
     ],
     connections: [
-      { aUid: "u1", aConn: "E", bUid: "tack1", bConn: "W" },
-      { aUid: "tack1", aConn: "E", bUid: "u2", bConn: "W" },
-      { aUid: "tack1", aConn: "S", bUid: "u3", bConn: "N" },
+      { aUid: "u1", aConn: "RIGHT", bUid: "tack1", bConn: "LEFT" },
+      { aUid: "tack1", aConn: "RIGHT", bUid: "u2", bConn: "LEFT" },
+      { aUid: "tack1", aConn: "RIGHT", bUid: "u3", bConn: "LEFT" },
     ],
   },
 ];

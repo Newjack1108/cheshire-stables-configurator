@@ -484,25 +484,29 @@ export default function StableConfigurator() {
   function rotateLayout() {
     if (units.length === 0) return;
     
-    // Calculate center point of all units
+    // Calculate center point of all units (using their bounding boxes)
     let centerX = 0;
     let centerY = 0;
+    let totalWeight = 0;
     for (const u of units) {
-      const b = bbox(u, getModule(u.moduleId));
-      centerX += b.x + b.w / 2;
-      centerY += b.y + b.d / 2;
+      const m = getModule(u.moduleId);
+      const b = bbox(u, m);
+      const weight = b.w * b.d; // Weight by area
+      centerX += (b.x + b.w / 2) * weight;
+      centerY += (b.y + b.d / 2) * weight;
+      totalWeight += weight;
     }
-    centerX /= units.length;
-    centerY /= units.length;
+    centerX /= totalWeight;
+    centerY /= totalWeight;
     
-    // Rotate each unit around the center
-    const newRotation = (layoutRotation + 90) % 360;
-    const rotationRad = (newRotation * Math.PI) / 180;
+    // Rotate 90 degrees clockwise
+    const rotationRad = (90 * Math.PI) / 180;
     const cos = Math.cos(rotationRad);
     const sin = Math.sin(rotationRad);
     
     const rotatedUnits = units.map((u) => {
-      const b = bbox(u, getModule(u.moduleId));
+      const m = getModule(u.moduleId);
+      const b = bbox(u, m);
       const unitCenterX = b.x + b.w / 2;
       const unitCenterY = b.y + b.d / 2;
       
@@ -513,13 +517,12 @@ export default function StableConfigurator() {
       const newY = centerY + dx * sin + dy * cos;
       
       // Calculate new position (top-left corner)
-      const newUnitCenterX = newX;
-      const newUnitCenterY = newY;
-      const newXFt = newUnitCenterX - b.w / 2;
-      const newYFt = newUnitCenterY - b.d / 2;
+      // Need to account for the fact that after rotation, width/height may swap
+      const newUnitRot = ((u.rot + 90) % 360) as Rotation;
+      const { w, d } = rotatedSize(m.widthFt, m.depthFt, newUnitRot);
       
-      // Add rotation to unit's rotation
-      const newUnitRot = (u.rot + 90) % 360;
+      const newXFt = newX - w / 2;
+      const newYFt = newY - d / 2;
       
       return {
         ...u,
@@ -530,7 +533,7 @@ export default function StableConfigurator() {
     });
     
     setUnits(rotatedUnits);
-    setLayoutRotation(newRotation);
+    setLayoutRotation((layoutRotation + 90) % 360);
   }
 
   // Load template
@@ -700,6 +703,70 @@ export default function StableConfigurator() {
 
   // Check if a module position is valid (no overlaps)
   // excludeUid: optional UID to exclude from overlap check (useful when dragging existing unit)
+  // Check if two connectors can connect based on building types
+  function canConnect(
+    sourceConn: ConnectorId,
+    sourceKind: "stable" | "shelter" | "corner" | "tack_room",
+    targetConn: ConnectorId,
+    targetKind: "stable" | "shelter" | "corner" | "tack_room"
+  ): boolean {
+    // Standard building to Standard building: LEFT connects to RIGHT
+    if ((sourceKind === "stable" || sourceKind === "shelter" || sourceKind === "tack_room") &&
+        (targetKind === "stable" || targetKind === "shelter" || targetKind === "tack_room")) {
+      return (sourceConn === "LEFT" && targetConn === "RIGHT") ||
+             (sourceConn === "RIGHT" && targetConn === "LEFT");
+    }
+    
+    // Corner to Standard: DOOR_SIDE connectors connect to same-side standard connectors
+    if (sourceKind === "corner" && 
+        (targetKind === "stable" || targetKind === "shelter" || targetKind === "tack_room")) {
+      if (sourceConn === "DOOR_SIDE_LEFT" && targetConn === "LEFT") return true;
+      if (sourceConn === "DOOR_SIDE_RIGHT" && targetConn === "RIGHT") return true;
+      // BACK can connect to either LEFT or RIGHT (will determine rotation based on front facing)
+      if (sourceConn === "BACK" && (targetConn === "LEFT" || targetConn === "RIGHT")) return true;
+    }
+    
+    // Standard to Corner: reverse of above
+    if ((sourceKind === "stable" || sourceKind === "shelter" || sourceKind === "tack_room") &&
+        targetKind === "corner") {
+      if (sourceConn === "LEFT" && targetConn === "DOOR_SIDE_LEFT") return true;
+      if (sourceConn === "RIGHT" && targetConn === "DOOR_SIDE_RIGHT") return true;
+      if ((sourceConn === "LEFT" || sourceConn === "RIGHT") && targetConn === "BACK") return true;
+    }
+    
+    return false;
+  }
+
+  // Calculate if front should face inward when connecting standard to corner
+  function shouldFaceInward(
+    standardUnit: PlacedUnit,
+    standardMod: ModuleDef,
+    cornerUnit: PlacedUnit,
+    cornerMod: ModuleDef,
+    standardConn: ConnectorId,
+    cornerConn: ConnectorId
+  ): { targetFrontFace: "N" | "E" | "S" | "W" } | null {
+    if (standardMod.kind === "corner" || cornerMod.kind !== "corner") return null;
+    
+    // Calculate direction from standard's connector position to corner's center
+    const standardConnWorld = connectorWorld(standardUnit, standardMod, 
+      standardMod.connectors.find(c => c.id === standardConn)!);
+    const cornerCenter = {
+      x: cornerUnit.xFt + cornerMod.widthFt / 2,
+      y: cornerUnit.yFt + cornerMod.depthFt / 2
+    };
+    
+    const dx = cornerCenter.x - standardConnWorld.x;
+    const dy = cornerCenter.y - standardConnWorld.y;
+    
+    // Determine which direction the front should face
+    if (Math.abs(dx) > Math.abs(dy)) {
+      return { targetFrontFace: dx > 0 ? "E" : "W" };
+    } else {
+      return { targetFrontFace: dy > 0 ? "S" : "N" };
+    }
+  }
+
   function isValidPosition(moduleId: string, x: number, y: number, rot: Rotation, excludeUid?: string): boolean {
     const m = getModule(moduleId);
     const testUnit: PlacedUnit = {
@@ -760,6 +827,11 @@ export default function StableConfigurator() {
 
       for (const rot of newMod.rotations) {
         for (const c of newMod.connectors) {
+          // Check if these connectors can connect based on building types
+          if (!canConnect(c.id, newMod.kind, targetConnCandidate.id, aMod.kind)) {
+            continue;
+          }
+          
           const p = rotatePoint(
             c.x,
             c.y,
@@ -768,38 +840,65 @@ export default function StableConfigurator() {
             rot
           );
           const v = rotateVec(c.nx, c.ny, rot);
-          // Dot product: -1 means opposite directions (perfect match), 1 means same direction (bad)
-          // We want the most negative dot product (closest to -1)
-          const dot = v.nx * aW.nx + v.ny * aW.ny;
+          
+          // Calculate position
           const x = aW.x - p.x;
           const y = aW.y - p.y;
           
-          // For connectors to connect, they must face opposite directions (dot product should be -1)
-          // Only consider if dot product is significantly negative (opposite-facing, dot < -0.7)
-          if (dot < -0.7) {
-            // Use dot product as primary score (more negative is better)
-            let totalScore = dot;
-            
-            // Add front face preference as a tie-breaker for standard stables
-            // Only apply when dot products are similar (within 0.1) to avoid blocking valid connections
-            if (newMod.kind === "stable") {
-              const frontFace = getFrontFace(rot);
-              let frontFaceBonus = 0;
-              // Prefer South (0°) or East (270°) facing
-              if (frontFace === "S") frontFaceBonus = 0.1;
-              else if (frontFace === "E") frontFaceBonus = 0.05;
-              else if (frontFace === "W") frontFaceBonus = 0;
-              else if (frontFace === "N") frontFaceBonus = -0.1; // Slight penalty for North (upside down)
-              
-              // Only apply preference if no best exists yet, or if dot products are very close
-              if (!best || Math.abs(dot - best.score) < 0.1) {
-                totalScore = dot - frontFaceBonus; // Subtract bonus to make score lower (better)
+          // Calculate score based on connector alignment
+          // For standard-to-standard: connectors should be opposite (dot product < -0.7)
+          // For corner-to-standard: connectors can be same direction (for DOOR_SIDE) or opposite (for BACK)
+          const dot = v.nx * aW.nx + v.ny * aW.ny;
+          
+          let score = Math.abs(dot); // Lower is better (closer to -1 or 1 depending on connection type)
+          
+          // Standard-to-standard: prefer opposite directions (dot < -0.7)
+          if ((newMod.kind === "stable" || newMod.kind === "shelter" || newMod.kind === "tack_room") &&
+              (aMod.kind === "stable" || aMod.kind === "shelter" || aMod.kind === "tack_room")) {
+            if (dot >= -0.7) continue; // Must be opposite
+            score = -dot; // More negative dot = better score
+          }
+          // Corner-to-standard or Standard-to-corner
+          else if (newMod.kind === "corner" || aMod.kind === "corner") {
+            // DOOR_SIDE connectors should face same direction (dot > 0.7)
+            if ((c.id === "DOOR_SIDE_LEFT" || c.id === "DOOR_SIDE_RIGHT") ||
+                (targetConnCandidate.id === "DOOR_SIDE_LEFT" || targetConnCandidate.id === "DOOR_SIDE_RIGHT")) {
+              if (dot < 0.7) continue; // Must be same direction
+              score = 1 - dot; // Closer to 1 = better
+            }
+            // BACK connector can connect with opposite direction
+            else if (c.id === "BACK" || targetConnCandidate.id === "BACK") {
+              if (dot >= -0.7) continue; // Must be opposite
+              score = -dot;
+            }
+          }
+          
+          // Calculate front face preference for standard buildings connecting to corners
+          let frontFaceBonus = 0;
+          if ((newMod.kind === "stable" || newMod.kind === "shelter" || newMod.kind === "tack_room") &&
+              aMod.kind === "corner") {
+            // Create a temporary unit to calculate front face direction
+            const tempUnit: PlacedUnit = {
+              uid: "temp",
+              moduleId: newMod.id,
+              xFt: x,
+              yFt: y,
+              rot,
+              selectedExtras: []
+            };
+            const inward = shouldFaceInward(tempUnit, newMod, sourceUnit, aMod, c.id, targetConnCandidate.id);
+            if (inward) {
+              const currentFrontFace = getFrontFace(rot);
+              if (currentFrontFace === inward.targetFrontFace) {
+                frontFaceBonus = 0.2; // Bonus for facing inward
               }
             }
-            
-            if (!best || totalScore < best.score) {
-              best = { rot, conn: c.id, x, y, score: totalScore };
-            }
+          }
+          
+          const totalScore = score - frontFaceBonus;
+          
+          if (!best || totalScore < best.score) {
+            best = { rot, conn: c.id, x, y, score: totalScore };
           }
         }
       }
@@ -922,40 +1021,69 @@ export default function StableConfigurator() {
           }
         }
         
+        // Check if these connectors can connect based on building types
+        if (!canConnect(c.id, unitMod.kind, targetConn, targetMod.kind)) {
+          continue;
+        }
+        
         const p = rotatePoint(c.x, c.y, unitMod.widthFt, unitMod.depthFt, rot);
         const v = rotateVec(c.nx, c.ny, rot);
-        // Dot product: -1 means opposite directions (perfect match), 1 means same direction (bad)
-        // We want the most negative dot product (closest to -1)
-        const dot = v.nx * aW.nx + v.ny * aW.ny;
+        
+        // Calculate position
         const x = aW.x - p.x;
         const y = aW.y - p.y;
         
-        // For connectors to connect, they must face opposite directions (dot product should be -1)
-        // Only consider if dot product is significantly negative (opposite-facing, dot < -0.7)
-        if (dot < -0.7) {
-          // Use dot product as primary score (more negative is better)
-          let totalScore = dot;
-          
-          // Add front face preference as a tie-breaker for standard stables
-          // Only apply when dot products are similar (within 0.1) to avoid blocking valid connections
-          if (unitMod.kind === "stable") {
-            const frontFace = getFrontFace(rot);
-            let frontFaceBonus = 0;
-            // Prefer South (0°) or East (270°) facing
-            if (frontFace === "S") frontFaceBonus = 0.1;
-            else if (frontFace === "E") frontFaceBonus = 0.05;
-            else if (frontFace === "W") frontFaceBonus = 0;
-            else if (frontFace === "N") frontFaceBonus = -0.1; // Slight penalty for North (upside down)
-            
-            // Only apply preference if no best exists yet, or if dot products are very close
-            if (!best || Math.abs(dot - best.score) < 0.1) {
-              totalScore = dot - frontFaceBonus; // Subtract bonus to make score lower (better)
+        // Calculate score based on connector alignment
+        const dot = v.nx * aW.nx + v.ny * aW.ny;
+        
+        let score = Math.abs(dot);
+        
+        // Standard-to-standard: prefer opposite directions (dot < -0.7)
+        if ((unitMod.kind === "stable" || unitMod.kind === "shelter" || unitMod.kind === "tack_room") &&
+            (targetMod.kind === "stable" || targetMod.kind === "shelter" || targetMod.kind === "tack_room")) {
+          if (dot >= -0.7) continue; // Must be opposite
+          score = -dot;
+        }
+        // Corner-to-standard or Standard-to-corner
+        else if (unitMod.kind === "corner" || targetMod.kind === "corner") {
+          // DOOR_SIDE connectors should face same direction (dot > 0.7)
+          if ((c.id === "DOOR_SIDE_LEFT" || c.id === "DOOR_SIDE_RIGHT") ||
+              (targetConn === "DOOR_SIDE_LEFT" || targetConn === "DOOR_SIDE_RIGHT")) {
+            if (dot < 0.7) continue; // Must be same direction
+            score = 1 - dot;
+          }
+          // BACK connector can connect with opposite direction
+          else if (c.id === "BACK" || targetConn === "BACK") {
+            if (dot >= -0.7) continue; // Must be opposite
+            score = -dot;
+          }
+        }
+        
+        // Calculate front face preference for standard buildings connecting to corners
+        let frontFaceBonus = 0;
+        if ((unitMod.kind === "stable" || unitMod.kind === "shelter" || unitMod.kind === "tack_room") &&
+            targetMod.kind === "corner") {
+          const tempUnit: PlacedUnit = {
+            uid: "temp",
+            moduleId: unitMod.id,
+            xFt: x,
+            yFt: y,
+            rot,
+            selectedExtras: []
+          };
+          const inward = shouldFaceInward(tempUnit, unitMod, targetUnit, targetMod, c.id, targetConn);
+          if (inward) {
+            const currentFrontFace = getFrontFace(rot);
+            if (currentFrontFace === inward.targetFrontFace) {
+              frontFaceBonus = 0.2;
             }
           }
-          
-          if (!best || totalScore < best.score) {
-            best = { rot, conn: c.id, x, y, score: totalScore };
-          }
+        }
+        
+        const totalScore = score - frontFaceBonus;
+        
+        if (!best || totalScore < best.score) {
+          best = { rot, conn: c.id, x, y, score: totalScore };
         }
       }
     }
@@ -1388,24 +1516,6 @@ export default function StableConfigurator() {
     };
   }, [draggingModuleId, draggingUnitUid, dragPosition, dragOffset, snappedConnector, units]);
 
-  // Handle wheel events for zooming (with passive: false to allow preventDefault)
-  useEffect(() => {
-    const svg = svgRef.current;
-    if (!svg) return;
-
-    function handleWheel(e: WheelEvent) {
-      e.preventDefault();
-      const delta = e.deltaY > 0 ? -0.1 : 0.1;
-      const newZoom = Math.max(0.25, Math.min(4, zoomLevel + delta));
-      setZoomLevel(newZoom);
-    }
-
-    svg.addEventListener("wheel", handleWheel, { passive: false });
-
-    return () => {
-      svg.removeEventListener("wheel", handleWheel);
-    };
-  }, [zoomLevel]);
 
   // Render drag preview
   function renderDragPreview() {
@@ -1471,39 +1581,69 @@ export default function StableConfigurator() {
           let best: { rot: Rotation; conn: ConnectorId; x: number; y: number; score: number } | null = null;
           for (const rot of m.rotations) {
             for (const c of m.connectors) {
+              // Check if these connectors can connect based on building types
+              if (!canConnect(c.id, m.kind, targetConnCandidate.id, targetMod.kind)) {
+                continue;
+              }
+              
               const p = rotatePoint(c.x, c.y, m.widthFt, m.depthFt, rot);
               const v = rotateVec(c.nx, c.ny, rot);
-              // Dot product: -1 means opposite directions (perfect match)
-              // We want the most negative dot product (closest to -1)
-              const dot = v.nx * aW.nx + v.ny * aW.ny;
+              
+              // Calculate position
               const x = aW.x - p.x;
               const y = aW.y - p.y;
               
-              // Only consider if dot product is significantly negative (opposite-facing, dot < -0.7)
-              if (dot < -0.7) {
-                // Use dot product as primary score (more negative is better)
-                let totalScore = dot;
-                
-                // Add front face preference as a tie-breaker for standard stables
-                // Only apply when dot products are similar (within 0.1) to avoid blocking valid connections
-                if (m.kind === "stable") {
-                  const frontFace = getFrontFace(rot);
-                  let frontFaceBonus = 0;
-                  // Prefer South (0°) or East (270°) facing
-                  if (frontFace === "S") frontFaceBonus = 0.1;
-                  else if (frontFace === "E") frontFaceBonus = 0.05;
-                  else if (frontFace === "W") frontFaceBonus = 0;
-                  else if (frontFace === "N") frontFaceBonus = -0.1; // Slight penalty for North (upside down)
-                  
-                  // Only apply preference if no best exists yet, or if dot products are very close
-                  if (!best || Math.abs(dot - best.score) < 0.1) {
-                    totalScore = dot - frontFaceBonus; // Subtract bonus to make score lower (better)
+              // Calculate score based on connector alignment
+              const dot = v.nx * aW.nx + v.ny * aW.ny;
+              
+              let score = Math.abs(dot);
+              
+              // Standard-to-standard: prefer opposite directions (dot < -0.7)
+              if ((m.kind === "stable" || m.kind === "shelter" || m.kind === "tack_room") &&
+                  (targetMod.kind === "stable" || targetMod.kind === "shelter" || targetMod.kind === "tack_room")) {
+                if (dot >= -0.7) continue; // Must be opposite
+                score = -dot;
+              }
+              // Corner-to-standard or Standard-to-corner
+              else if (m.kind === "corner" || targetMod.kind === "corner") {
+                // DOOR_SIDE connectors should face same direction (dot > 0.7)
+                if ((c.id === "DOOR_SIDE_LEFT" || c.id === "DOOR_SIDE_RIGHT") ||
+                    (targetConnCandidate.id === "DOOR_SIDE_LEFT" || targetConnCandidate.id === "DOOR_SIDE_RIGHT")) {
+                  if (dot < 0.7) continue; // Must be same direction
+                  score = 1 - dot;
+                }
+                // BACK connector can connect with opposite direction
+                else if (c.id === "BACK" || targetConnCandidate.id === "BACK") {
+                  if (dot >= -0.7) continue; // Must be opposite
+                  score = -dot;
+                }
+              }
+              
+              // Calculate front face preference for standard buildings connecting to corners
+              let frontFaceBonus = 0;
+              if ((m.kind === "stable" || m.kind === "shelter" || m.kind === "tack_room") &&
+                  targetMod.kind === "corner") {
+                const tempUnit: PlacedUnit = {
+                  uid: "temp",
+                  moduleId: m.id,
+                  xFt: x,
+                  yFt: y,
+                  rot,
+                  selectedExtras: []
+                };
+                const inward = shouldFaceInward(tempUnit, m, targetUnit, targetMod, c.id, targetConnCandidate.id);
+                if (inward) {
+                  const currentFrontFace = getFrontFace(rot);
+                  if (currentFrontFace === inward.targetFrontFace) {
+                    frontFaceBonus = 0.2;
                   }
                 }
-                
-                if (!best || totalScore < best.score) {
-                  best = { rot, conn: c.id, x, y, score: totalScore };
-                }
+              }
+              
+              const totalScore = score - frontFaceBonus;
+              
+              if (!best || totalScore < best.score) {
+                best = { rot, conn: c.id, x, y, score: totalScore };
               }
             }
           }
@@ -1972,7 +2112,7 @@ export default function StableConfigurator() {
               Standard Stables
             </div>
             <button
-              onClick={() => attach("stable_6x12", "E")}
+              onClick={() => attach("stable_6x12", "RIGHT")}
               style={{
                 padding: "14px 20px",
                 backgroundColor: DARK_GREEN,
@@ -2007,7 +2147,7 @@ export default function StableConfigurator() {
               + Add Stable 6x12
             </button>
             <button
-              onClick={() => attach("stable_8x12", "E")}
+              onClick={() => attach("stable_8x12", "RIGHT")}
               style={{
                 padding: "14px 20px",
                 backgroundColor: DARK_GREEN,
@@ -2042,7 +2182,7 @@ export default function StableConfigurator() {
               + Add Stable 8x12
             </button>
             <button
-              onClick={() => attach("stable_10x12", "E")}
+              onClick={() => attach("stable_10x12", "RIGHT")}
               style={{
                 padding: "14px 20px",
                 backgroundColor: DARK_GREEN,
@@ -2077,7 +2217,7 @@ export default function StableConfigurator() {
               + Add Stable 10x12
             </button>
             <button
-              onClick={() => attach("stable_12x12", "E")}
+              onClick={() => attach("stable_12x12", "RIGHT")}
               style={{
                 padding: "14px 20px",
                 backgroundColor: DARK_GREEN,
@@ -2112,7 +2252,7 @@ export default function StableConfigurator() {
               + Add Stable 12x12
             </button>
             <button
-              onClick={() => attach("stable_14x12", "E")}
+              onClick={() => attach("stable_14x12", "RIGHT")}
               style={{
                 padding: "14px 20px",
                 backgroundColor: DARK_GREEN,
@@ -2147,7 +2287,7 @@ export default function StableConfigurator() {
               + Add Stable 14x12
             </button>
             <button
-              onClick={() => attach("stable_16x12", "E")}
+              onClick={() => attach("stable_16x12", "RIGHT")}
               style={{
                 padding: "14px 20px",
                 backgroundColor: DARK_GREEN,
@@ -2194,7 +2334,7 @@ export default function StableConfigurator() {
               Other Modules
             </div>
             <button
-              onClick={() => attach("shelter_12x12", "E")}
+              onClick={() => attach("shelter_12x12", "RIGHT")}
               style={{
                 padding: "14px 20px",
                 backgroundColor: DARK_GREEN,
@@ -2229,7 +2369,7 @@ export default function StableConfigurator() {
               + Add Shelter
             </button>
             <button
-              onClick={() => attach("corner_16x12", "E")}
+              onClick={() => attach("corner_16x12", "DOOR_SIDE_RIGHT")}
               style={{
                 padding: "14px 20px",
                 backgroundColor: DARK_GREEN,
@@ -2264,7 +2404,7 @@ export default function StableConfigurator() {
               + Add Corner Stable
             </button>
             <button
-              onClick={() => attach("corner_rh_16x12", "E")}
+              onClick={() => attach("corner_rh_16x12", "DOOR_SIDE_RIGHT")}
               style={{
                 padding: "14px 20px",
                 backgroundColor: DARK_GREEN,
@@ -2299,7 +2439,7 @@ export default function StableConfigurator() {
               + Add RH Corner Stable
             </button>
             <button
-              onClick={() => attach("tack_room_12x12", "E")}
+              onClick={() => attach("tack_room_12x12", "RIGHT")}
               style={{
                 padding: "14px 20px",
                 backgroundColor: DARK_GREEN,

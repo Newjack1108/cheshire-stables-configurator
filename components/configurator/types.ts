@@ -12,7 +12,10 @@ export type FrontFeature =
   | { type: "opening"; fromX: number; toX: number; doors?: DoorLeaf[] }
   | { type: "window"; fromX: number; toX: number };
 
-export type ConnectorId = "W" | "E" | "N" | "S";
+// Building-type-specific connector IDs
+// Standard buildings: LEFT, RIGHT
+// Corner buildings: BACK, DOOR_SIDE_LEFT, DOOR_SIDE_RIGHT
+export type ConnectorId = "LEFT" | "RIGHT" | "BACK" | "DOOR_SIDE_LEFT" | "DOOR_SIDE_RIGHT";
 
 export type ConnectorDef = {
   id: ConnectorId;
