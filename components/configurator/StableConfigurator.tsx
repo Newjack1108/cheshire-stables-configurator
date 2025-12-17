@@ -484,27 +484,50 @@ export default function StableConfigurator() {
   }
 
   // Find nearest available connector within snap distance
+  // Checks if any connector of the dragged module (at position x, y, rot) is near any available connector
   // excludeUid: optional UID to exclude from search (useful when dragging existing unit)
-  function findNearestConnector(x: number, y: number, excludeUid?: string): { uid: string; connId: ConnectorId; distance: number } | null {
+  function findNearestConnector(
+    moduleId: string,
+    x: number,
+    y: number,
+    rot: Rotation,
+    excludeUid?: string
+  ): { uid: string; connId: ConnectorId; distance: number } | null {
     let nearest: { uid: string; connId: ConnectorId; distance: number } | null = null;
     const snapDistFt = SNAP_DISTANCE;
+    
+    const draggedMod = getModule(moduleId);
+    
+    // Get all connector positions for the dragged module at this position/rotation
+    const draggedConnectors: Array<{ x: number; y: number; connId: ConnectorId }> = [];
+    for (const conn of draggedMod.connectors) {
+      const connWorld = connectorWorld(
+        { uid: "temp", moduleId, xFt: x, yFt: y, rot, selectedExtras: [] },
+        draggedMod,
+        conn
+      );
+      draggedConnectors.push({ x: connWorld.x, y: connWorld.y, connId: conn.id });
+    }
 
-    for (const u of units) {
-      // Skip the unit being dragged
-      if (excludeUid && u.uid === excludeUid) continue;
-      
-      const m = getModule(u.moduleId);
-      for (const conn of m.connectors) {
-        if (isUsed(u.uid, conn.id)) continue;
+    // Check each dragged connector against all available connectors on other units
+    for (const draggedConn of draggedConnectors) {
+      for (const u of units) {
+        // Skip the unit being dragged
+        if (excludeUid && u.uid === excludeUid) continue;
         
-        const connWorld = connectorWorld(u, m, conn);
-        const dx = connWorld.x - x;
-        const dy = connWorld.y - y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        
-        // Strict snap: must be within 2ft (no tolerance)
-        if (dist < snapDistFt && (!nearest || dist < nearest.distance)) {
-          nearest = { uid: u.uid, connId: conn.id, distance: dist };
+        const m = getModule(u.moduleId);
+        for (const conn of m.connectors) {
+          if (isUsed(u.uid, conn.id)) continue;
+          
+          const connWorld = connectorWorld(u, m, conn);
+          const dx = connWorld.x - draggedConn.x;
+          const dy = connWorld.y - draggedConn.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          
+          // Strict snap: must be within 2ft (no tolerance)
+          if (dist < snapDistFt && (!nearest || dist < nearest.distance)) {
+            nearest = { uid: u.uid, connId: conn.id, distance: dist };
+          }
         }
       }
     }
@@ -841,15 +864,22 @@ export default function StableConfigurator() {
 
     if (draggingModuleId) {
       // Find nearest connector for snapping
-      const nearest = findNearestConnector(worldPos.x, worldPos.y);
+      // Center the module on the mouse cursor for checking
+      const m = getModule(draggingModuleId);
+      const centeredX = worldPos.x - m.widthFt / 2;
+      const centeredY = worldPos.y - m.depthFt / 2;
+      const nearest = findNearestConnector(draggingModuleId, centeredX, centeredY, 0);
       setSnappedConnector(nearest ? { uid: nearest.uid, connId: nearest.connId } : null);
     } else if (draggingUnitUid && dragOffset) {
       // For repositioning existing unit, check for connectors
       // Use the unit's new position to find nearest connector (exclude the dragged unit)
-      const newX = worldPos.x - dragOffset.x;
-      const newY = worldPos.y - dragOffset.y;
-      const nearest = findNearestConnector(newX, newY, draggingUnitUid);
-      setSnappedConnector(nearest ? { uid: nearest.uid, connId: nearest.connId } : null);
+      const unit = units.find((u) => u.uid === draggingUnitUid);
+      if (unit) {
+        const newX = worldPos.x - dragOffset.x;
+        const newY = worldPos.y - dragOffset.y;
+        const nearest = findNearestConnector(unit.moduleId, newX, newY, unit.rot, draggingUnitUid);
+        setSnappedConnector(nearest ? { uid: nearest.uid, connId: nearest.connId } : null);
+      }
     }
   }
 
@@ -859,7 +889,11 @@ export default function StableConfigurator() {
       const worldPos = screenToWorld(svg, e.clientX, e.clientY);
       
       // Check for nearest connector at release position
-      const nearest = findNearestConnector(worldPos.x, worldPos.y);
+      // Center the module on the mouse cursor for checking
+      const m = getModule(draggingModuleId);
+      const centeredX = worldPos.x - m.widthFt / 2;
+      const centeredY = worldPos.y - m.depthFt / 2;
+      const nearest = findNearestConnector(draggingModuleId, centeredX, centeredY, 0);
       const releaseSnappedConnector = nearest ? { uid: nearest.uid, connId: nearest.connId } : null;
       
       if (releaseSnappedConnector) {
@@ -992,14 +1026,21 @@ export default function StableConfigurator() {
       setDragPosition(worldPos);
 
       if (draggingModuleId) {
-        const nearest = findNearestConnector(worldPos.x, worldPos.y);
+        // Center the module on the mouse cursor for checking
+        const m = getModule(draggingModuleId);
+        const centeredX = worldPos.x - m.widthFt / 2;
+        const centeredY = worldPos.y - m.depthFt / 2;
+        const nearest = findNearestConnector(draggingModuleId, centeredX, centeredY, 0);
         setSnappedConnector(nearest ? { uid: nearest.uid, connId: nearest.connId } : null);
       } else if (draggingUnitUid && dragOffset) {
         // For repositioning existing unit, check for connectors
-        const newX = worldPos.x - dragOffset.x;
-        const newY = worldPos.y - dragOffset.y;
-        const nearest = findNearestConnector(newX, newY, draggingUnitUid);
-        setSnappedConnector(nearest ? { uid: nearest.uid, connId: nearest.connId } : null);
+        const unit = units.find((u) => u.uid === draggingUnitUid);
+        if (unit) {
+          const newX = worldPos.x - dragOffset.x;
+          const newY = worldPos.y - dragOffset.y;
+          const nearest = findNearestConnector(unit.moduleId, newX, newY, unit.rot, draggingUnitUid);
+          setSnappedConnector(nearest ? { uid: nearest.uid, connId: nearest.connId } : null);
+        }
       }
     }
 
@@ -1014,7 +1055,11 @@ export default function StableConfigurator() {
           const worldPos = screenToWorld(svg, e.clientX, e.clientY);
           
           // Check for nearest connector at release position
-          const nearest = findNearestConnector(worldPos.x, worldPos.y);
+          // Center the module on the mouse cursor for checking
+          const m = getModule(draggingModuleId);
+          const centeredX = worldPos.x - m.widthFt / 2;
+          const centeredY = worldPos.y - m.depthFt / 2;
+          const nearest = findNearestConnector(draggingModuleId, centeredX, centeredY, 0);
           const releaseSnappedConnector = nearest ? { uid: nearest.uid, connId: nearest.connId } : null;
           
           if (releaseSnappedConnector) {
@@ -1040,18 +1085,18 @@ export default function StableConfigurator() {
           const worldPos = screenToWorld(svg, e.clientX, e.clientY);
           
           // Check for nearest connector at release position (exclude the dragged unit)
-          const newX = worldPos.x - dragOffset.x;
-          const newY = worldPos.y - dragOffset.y;
-          const nearest = findNearestConnector(newX, newY, draggingUnitUid);
-          const releaseSnappedConnector = nearest ? { uid: nearest.uid, connId: nearest.connId } : null;
-          
-          if (releaseSnappedConnector) {
-            // Connect to connector
-            connectExistingUnit(draggingUnitUid, releaseSnappedConnector.connId, releaseSnappedConnector.uid);
-          } else {
-            // Place in free space
-            const unit = units.find((u) => u.uid === draggingUnitUid);
-            if (unit) {
+          const unit = units.find((u) => u.uid === draggingUnitUid);
+          if (unit) {
+            const newX = worldPos.x - dragOffset.x;
+            const newY = worldPos.y - dragOffset.y;
+            const nearest = findNearestConnector(unit.moduleId, newX, newY, unit.rot, draggingUnitUid);
+            const releaseSnappedConnector = nearest ? { uid: nearest.uid, connId: nearest.connId } : null;
+            
+            if (releaseSnappedConnector) {
+              // Connect to connector
+              connectExistingUnit(draggingUnitUid, releaseSnappedConnector.connId, releaseSnappedConnector.uid);
+            } else {
+              // Place in free space
               const m = getModule(unit.moduleId);
               
               // Check if position is valid (excluding the dragged unit)
@@ -1355,6 +1400,22 @@ export default function StableConfigurator() {
               }}
             >
               + Add Corner Stable
+            </button>
+            <button
+              onClick={() => attach("corner_rh_16x12", "E")}
+              onMouseDown={() => handleButtonMouseDown("corner_rh_16x12")}
+              style={{
+                padding: "10px 16px",
+                backgroundColor: "#0066cc",
+                color: "white",
+                border: "none",
+                borderRadius: 6,
+                cursor: "grab",
+                fontSize: 14,
+                fontWeight: 500,
+              }}
+            >
+              + Add RH Corner Stable
             </button>
             <button
               onClick={() => attach("tack_room_12x12", "E")}

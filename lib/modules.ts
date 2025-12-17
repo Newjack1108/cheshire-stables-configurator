@@ -11,14 +11,14 @@ const makeCornerConnectors = (w: number, d: number) => [
   { id: "S" as const, x: w / 2, y: d, nx: 0, ny: 1 },
 ];
 
-// Corner stable connectors: door on left (0-4), blank on right (4-16)
-// W connector at center of 12ft blank = 10ft from left (4 + 6)
-// E connector at right edge
+// Corner stable connectors: only S connector at 10ft from left (center of 12ft blank)
 const makeCornerStableConnectors = (w: number, d: number) => [
-  { id: "W" as const, x: 10, y: d / 2, nx: -1, ny: 0 }, // Center of 12ft blank (4-16)
-  { id: "E" as const, x: w, y: d / 2, nx: 1, ny: 0 }, // Right edge
-  { id: "N" as const, x: w / 2, y: 0, nx: 0, ny: -1 }, // Top center
-  { id: "S" as const, x: w / 2, y: d, nx: 0, ny: 1 }, // Bottom center
+  { id: "S" as const, x: 10, y: d, nx: 0, ny: 1 }, // 10ft from left, 6ft from right, bottom edge
+];
+
+// RH Corner stable connectors: only S connector at 6ft from left (center of 12ft blank on left side)
+const makeRHCornerStableConnectors = (w: number, d: number) => [
+  { id: "S" as const, x: 6, y: d, nx: 0, ny: 1 }, // 6ft from left, 10ft from right, bottom edge
 ];
 
 // Standard stable layout: 1ft blank + 4ft door + Xft blank + 2ft window + 1ft blank
@@ -196,9 +196,9 @@ export const MODULES: ModuleDef[] = [
       { id: "water_point", name: "Water Point", price: 250, description: "Water connection point" },
     ],
   },
-  // Corner Stable - 16x12 with corner connectors
+  // Corner Stable - 16x12 (left-hand)
   // Layout: 4ft door on left (0-4), 12ft blank on right (4-16)
-  // W connector at center of 12ft blank = 10ft from left (4 + 6)
+  // S connector at center of 12ft blank = 10ft from left (4 + 6), 6ft from right
   {
     id: "corner_16x12",
     name: "Corner Stable 16x12",
@@ -218,6 +218,36 @@ export const MODULES: ModuleDef[] = [
       },
       // 12ft blank panel on right (4-16ft) - connector is at center of this = 10ft from left
       { type: "panel", fromX: 4, toX: "W" },
+    ],
+    extras: [
+      { id: "partition", name: "Internal Partition", price: 600, description: "Divide the stable into sections" },
+      { id: "feed_store", name: "Feed Store", price: 300, description: "Add feed storage area" },
+      { id: "hay_rack", name: "Hay Rack", price: 150, description: "Wall-mounted hay rack" },
+      { id: "water_trough", name: "Water Trough", price: 200, description: "Automatic water trough" },
+    ],
+  },
+  // RH Corner Stable - 16x12 (right-hand)
+  // Layout: 12ft blank on left (0-12), 4ft door on right (12-16)
+  // S connector at center of 12ft blank = 6ft from left, 10ft from right
+  {
+    id: "corner_rh_16x12",
+    name: "RH Corner Stable 16x12",
+    kind: "corner",
+    widthFt: 16,
+    depthFt: 12,
+    rotations: [0, 90, 180, 270],
+    basePrice: 5200,
+    connectors: makeRHCornerStableConnectors(16, 12),
+    frontFeatures: [
+      // 12ft blank panel on left (0-12ft) - connector is at center of this = 6ft from left
+      { type: "panel", fromX: 0, toX: 12 },
+      // 4ft door on right (12-16ft)
+      {
+        type: "opening",
+        fromX: 12,
+        toX: 16,
+        doors: [{ widthFt: 4, hinge: "left", swing: "out" }],
+      },
     ],
     extras: [
       { id: "partition", name: "Internal Partition", price: 600, description: "Divide the stable into sections" },
