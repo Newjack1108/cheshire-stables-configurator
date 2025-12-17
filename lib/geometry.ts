@@ -31,5 +31,12 @@ export function rotateVec(nx: number, ny: number, rot: Rotation) {
 }
 
 export function overlaps(a: any, b: any) {
-  return !(a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.d <= b.y || b.y + b.d <= a.y);
+  // Add small tolerance (0.01ft) to allow boxes that are just touching
+  const tolerance = 0.01;
+  return !(
+    a.x + a.w <= b.x + tolerance || 
+    b.x + b.w <= a.x + tolerance || 
+    a.y + a.d <= b.y + tolerance || 
+    b.y + b.d <= a.y + tolerance
+  );
 }

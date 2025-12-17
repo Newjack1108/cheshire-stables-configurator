@@ -190,24 +190,28 @@ function renderDoor(
     );
   }
 
-  // Draw door leaves with swing arcs
+  // Draw door leaves with swing arcs (convex outward, bulging away from stable)
+  // The arc shows the path of the free edge of the door as it swings open outward
   let doorPos = openingStart * FT_TO_PX;
   for (const door of feature.doors) {
     const doorWidthPx = door.widthFt * FT_TO_PX;
     const isLeftHinge = door.hinge === "left";
-    const arcRadius = doorWidthPx * 0.9; // Slightly smaller than door width for visual clarity
+    const arcRadius = doorWidthPx * 0.9; // Arc radius matches door width
     
     if (frontFace === "S") {
-      // Bottom edge - door swings outward (down)
+      // Bottom edge - door swings outward (down/away from building)
       const hingeX = isLeftHinge ? doorPos : doorPos + doorWidthPx;
       const hingeY = d * FT_TO_PX;
-      const endX = isLeftHinge ? hingeX - arcRadius : hingeX + arcRadius;
-      const endY = hingeY - arcRadius;
+      // Free edge (opposite of hinge) traces an arc bulging outward (downward)
+      const freeEdgeX = isLeftHinge ? doorPos + doorWidthPx : doorPos;
+      const freeEdgeY = hingeY; // Start at same Y as hinge
+      // When door swings open, free edge moves outward (downward)
+      const endY = hingeY + arcRadius; // Arc bulges outward (downward)
       
       elements.push(
         <path
           key={`door-${doorPos}`}
-          d={`M ${hingeX} ${hingeY} A ${arcRadius} ${arcRadius} 0 0 ${isLeftHinge ? 1 : 0} ${endX} ${endY}`}
+          d={`M ${freeEdgeX} ${freeEdgeY} A ${arcRadius} ${arcRadius} 0 0 1 ${isLeftHinge ? freeEdgeX - arcRadius : freeEdgeX + arcRadius} ${endY}`}
           fill="none"
           stroke={isSelected ? "#0066cc" : "#333"}
           strokeWidth={STROKE}
@@ -215,16 +219,17 @@ function renderDoor(
         />
       );
     } else if (frontFace === "N") {
-      // Top edge - door swings outward (up)
+      // Top edge - door swings outward (up/away from building)
       const hingeX = isLeftHinge ? doorPos : doorPos + doorWidthPx;
       const hingeY = 0;
-      const endX = isLeftHinge ? hingeX + arcRadius : hingeX - arcRadius;
-      const endY = hingeY + arcRadius;
+      const freeEdgeX = isLeftHinge ? doorPos + doorWidthPx : doorPos;
+      const freeEdgeY = hingeY;
+      const endY = hingeY - arcRadius; // Arc bulges outward (upward)
       
       elements.push(
         <path
           key={`door-${doorPos}`}
-          d={`M ${hingeX} ${hingeY} A ${arcRadius} ${arcRadius} 0 0 ${isLeftHinge ? 0 : 1} ${endX} ${endY}`}
+          d={`M ${freeEdgeX} ${freeEdgeY} A ${arcRadius} ${arcRadius} 0 0 1 ${isLeftHinge ? freeEdgeX + arcRadius : freeEdgeX - arcRadius} ${endY}`}
           fill="none"
           stroke={isSelected ? "#0066cc" : "#333"}
           strokeWidth={STROKE}
@@ -232,16 +237,17 @@ function renderDoor(
         />
       );
     } else if (frontFace === "E") {
-      // Right edge - door swings outward (right)
+      // Right edge - door swings outward (right/away from building)
       const hingeX = w * FT_TO_PX;
       const hingeY = isLeftHinge ? doorPos : doorPos + doorWidthPx;
-      const endX = hingeX + arcRadius;
-      const endY = isLeftHinge ? hingeY + arcRadius : hingeY - arcRadius;
+      const freeEdgeX = hingeX;
+      const freeEdgeY = isLeftHinge ? doorPos + doorWidthPx : doorPos;
+      const endX = hingeX + arcRadius; // Arc bulges outward (rightward)
       
       elements.push(
         <path
           key={`door-${doorPos}`}
-          d={`M ${hingeX} ${hingeY} A ${arcRadius} ${arcRadius} 0 0 ${isLeftHinge ? 0 : 1} ${endX} ${endY}`}
+          d={`M ${freeEdgeX} ${freeEdgeY} A ${arcRadius} ${arcRadius} 0 0 1 ${endX} ${isLeftHinge ? freeEdgeY - arcRadius : freeEdgeY + arcRadius}`}
           fill="none"
           stroke={isSelected ? "#0066cc" : "#333"}
           strokeWidth={STROKE}
@@ -249,16 +255,17 @@ function renderDoor(
         />
       );
     } else if (frontFace === "W") {
-      // Left edge - door swings outward (left)
+      // Left edge - door swings outward (left/away from building)
       const hingeX = 0;
       const hingeY = isLeftHinge ? doorPos : doorPos + doorWidthPx;
-      const endX = hingeX - arcRadius;
-      const endY = isLeftHinge ? hingeY - arcRadius : hingeY + arcRadius;
+      const freeEdgeX = hingeX;
+      const freeEdgeY = isLeftHinge ? doorPos + doorWidthPx : doorPos;
+      const endX = hingeX - arcRadius; // Arc bulges outward (leftward)
       
       elements.push(
         <path
           key={`door-${doorPos}`}
-          d={`M ${hingeX} ${hingeY} A ${arcRadius} ${arcRadius} 0 0 ${isLeftHinge ? 1 : 0} ${endX} ${endY}`}
+          d={`M ${freeEdgeX} ${freeEdgeY} A ${arcRadius} ${arcRadius} 0 0 1 ${endX} ${isLeftHinge ? freeEdgeY + arcRadius : freeEdgeY - arcRadius}`}
           fill="none"
           stroke={isSelected ? "#0066cc" : "#333"}
           strokeWidth={STROKE}
@@ -455,8 +462,26 @@ export default function StableConfigurator() {
 
     const bNew = bbox(newUnit, newMod);
     for (const u of units) {
-      if (overlaps(bNew, bbox(u, getModule(u.moduleId))))
+      const bExisting = bbox(u, getModule(u.moduleId));
+      
+      // Check for actual overlap (not just touching)
+      const hasOverlap = 
+        bNew.x < bExisting.x + bExisting.w &&
+        bNew.x + bNew.w > bExisting.x &&
+        bNew.y < bExisting.y + bExisting.d &&
+        bNew.y + bNew.d > bExisting.y;
+      
+      // Allow boxes that are just touching at edges
+      const justTouching = 
+        Math.abs(bNew.x + bNew.w - bExisting.x) < 0.01 ||
+        Math.abs(bExisting.x + bExisting.w - bNew.x) < 0.01 ||
+        Math.abs(bNew.y + bNew.d - bExisting.y) < 0.01 ||
+        Math.abs(bExisting.y + bExisting.d - bNew.y) < 0.01;
+      
+      if (hasOverlap && !justTouching) {
+        console.log("Overlap detected:", { new: bNew, existing: bExisting });
         return alert("Overlap");
+      }
     }
 
     setUnits([...units, newUnit]);
@@ -575,14 +600,24 @@ export default function StableConfigurator() {
   }, [units]);
 
   const ext = useMemo(() => {
-    let maxX = 0,
-      maxY = 0;
+    if (units.length === 0) {
+      return { minX: 0, minY: 0, maxX: 12, maxY: 12 };
+    }
+    
+    let minX = Infinity,
+      minY = Infinity,
+      maxX = -Infinity,
+      maxY = -Infinity;
+    
     for (const u of units) {
       const b = bbox(u, getModule(u.moduleId));
+      minX = Math.min(minX, b.x);
+      minY = Math.min(minY, b.y);
       maxX = Math.max(maxX, b.x + b.w);
       maxY = Math.max(maxY, b.y + b.d);
     }
-    return { maxX, maxY };
+    
+    return { minX, minY, maxX, maxY };
   }, [units]);
 
   const selectedModule = selected ? getModule(selected.moduleId) : null;
@@ -844,7 +879,7 @@ export default function StableConfigurator() {
         <svg
           width="100%"
           height="600"
-          viewBox={`-20 -20 ${(ext.maxX + 6) * FT_TO_PX + 40} ${(ext.maxY + 6) * FT_TO_PX + 40}`}
+          viewBox={`${(ext.minX - 3) * FT_TO_PX} ${(ext.minY - 3) * FT_TO_PX} ${(ext.maxX - ext.minX + 6) * FT_TO_PX} ${(ext.maxY - ext.minY + 6) * FT_TO_PX}`}
           style={{ border: "2px solid #ccc", borderRadius: 8, backgroundColor: "#fafafa" }}
         >
           {/* Grid */}
