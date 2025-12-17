@@ -11,7 +11,100 @@ const makeCornerConnectors = (w: number, d: number) => [
   { id: "S" as const, x: w / 2, y: d, nx: 0, ny: 1 },
 ];
 
+// Standard stable layout: 1ft blank + 4ft door + Xft blank + 2ft window + 1ft blank
+// For widths >= 12ft, includes window. For smaller widths, no window.
+function makeStandardStableLayout(widthFt: number) {
+  const features: any[] = [];
+  
+  // Always start with 1ft blank panel
+  features.push({ type: "panel", fromX: 0, toX: 1 });
+  
+  // 4ft door (hinged on right, opens outward)
+  features.push({
+    type: "opening",
+    fromX: 1,
+    toX: 5,
+    doors: [{ widthFt: 4, hinge: "right", swing: "out" }],
+  });
+  
+  if (widthFt >= 12) {
+    // Standard layout with window: 1ft + 4ft door + 4ft blank + 2ft window + 1ft = 12ft
+    // For wider stables, add extra blank space before window
+    const blankBeforeWindow = widthFt - 12; // Extra space for wider stables
+    const windowStart = 5 + 4 + blankBeforeWindow; // 5 (end of door) + 4 (standard blank) + extra
+    
+    // Blank panel after door
+    features.push({ type: "panel", fromX: 5, toX: windowStart });
+    
+    // 2ft window
+    features.push({ type: "window", fromX: windowStart, toX: windowStart + 2 });
+    
+    // 1ft blank at end
+    features.push({ type: "panel", fromX: windowStart + 2, toX: "W" });
+  } else {
+    // Smaller stables: no window, just blank panel to end
+    features.push({ type: "panel", fromX: 5, toX: "W" });
+  }
+  
+  return features;
+}
+
 export const MODULES: ModuleDef[] = [
+  // Standard Stables (6ft - 16ft wide, all 12ft deep)
+  {
+    id: "stable_6x12",
+    name: "Stable 6x12",
+    kind: "stable",
+    widthFt: 6,
+    depthFt: 12,
+    rotations: [0, 90, 180, 270],
+    basePrice: 2800,
+    connectors: makeStraightConnectors(6, 12),
+    frontFeatures: makeStandardStableLayout(6),
+    extras: [
+      { id: "window", name: "Window", price: 250, description: "Add a window to the stable" },
+      { id: "partition", name: "Internal Partition", price: 350, description: "Divide the stable into two sections" },
+      { id: "feed_store", name: "Feed Store", price: 300, description: "Add feed storage area" },
+      { id: "hay_rack", name: "Hay Rack", price: 150, description: "Wall-mounted hay rack" },
+      { id: "water_trough", name: "Water Trough", price: 200, description: "Automatic water trough" },
+    ],
+  },
+  {
+    id: "stable_8x12",
+    name: "Stable 8x12",
+    kind: "stable",
+    widthFt: 8,
+    depthFt: 12,
+    rotations: [0, 90, 180, 270],
+    basePrice: 3200,
+    connectors: makeStraightConnectors(8, 12),
+    frontFeatures: makeStandardStableLayout(8),
+    extras: [
+      { id: "window", name: "Window", price: 250, description: "Add a window to the stable" },
+      { id: "partition", name: "Internal Partition", price: 400, description: "Divide the stable into two sections" },
+      { id: "feed_store", name: "Feed Store", price: 300, description: "Add feed storage area" },
+      { id: "hay_rack", name: "Hay Rack", price: 150, description: "Wall-mounted hay rack" },
+      { id: "water_trough", name: "Water Trough", price: 200, description: "Automatic water trough" },
+    ],
+  },
+  {
+    id: "stable_10x12",
+    name: "Stable 10x12",
+    kind: "stable",
+    widthFt: 10,
+    depthFt: 12,
+    rotations: [0, 90, 180, 270],
+    basePrice: 3600,
+    connectors: makeStraightConnectors(10, 12),
+    frontFeatures: makeStandardStableLayout(10),
+    extras: [
+      { id: "window", name: "Window", price: 250, description: "Add a window to the stable" },
+      { id: "partition", name: "Internal Partition", price: 450, description: "Divide the stable into two sections" },
+      { id: "feed_store", name: "Feed Store", price: 300, description: "Add feed storage area" },
+      { id: "hay_rack", name: "Hay Rack", price: 150, description: "Wall-mounted hay rack" },
+      { id: "water_trough", name: "Water Trough", price: 200, description: "Automatic water trough" },
+    ],
+  },
   {
     id: "stable_12x12",
     name: "Stable 12x12",
@@ -19,21 +112,12 @@ export const MODULES: ModuleDef[] = [
     widthFt: 12,
     depthFt: 12,
     rotations: [0, 90, 180, 270],
-    basePrice: 3500,
+    basePrice: 4000,
     connectors: makeStraightConnectors(12, 12),
-    frontFeatures: [
-      { type: "clad", fromX: 0, toX: 1 },
-      {
-        type: "opening",
-        fromX: 1,
-        toX: 5,
-        doors: [{ widthFt: 4, hinge: "right", swing: "out" }],
-      },
-      { type: "panel", fromX: 5, toX: "W" },
-    ],
+    frontFeatures: makeStandardStableLayout(12),
     extras: [
       { id: "window", name: "Window", price: 250, description: "Add a window to the stable" },
-      { id: "partition", name: "Internal Partition", price: 450, description: "Divide the stable into two sections" },
+      { id: "partition", name: "Internal Partition", price: 500, description: "Divide the stable into two sections" },
       { id: "feed_store", name: "Feed Store", price: 300, description: "Add feed storage area" },
       { id: "hay_rack", name: "Hay Rack", price: 150, description: "Wall-mounted hay rack" },
       { id: "water_trough", name: "Water Trough", price: 200, description: "Automatic water trough" },
@@ -46,18 +130,9 @@ export const MODULES: ModuleDef[] = [
     widthFt: 14,
     depthFt: 12,
     rotations: [0, 90, 180, 270],
-    basePrice: 4100,
+    basePrice: 4400,
     connectors: makeStraightConnectors(14, 12),
-    frontFeatures: [
-      { type: "clad", fromX: 0, toX: 1 },
-      {
-        type: "opening",
-        fromX: 1,
-        toX: 5,
-        doors: [{ widthFt: 4, hinge: "right", swing: "out" }],
-      },
-      { type: "panel", fromX: 5, toX: "W" },
-    ],
+    frontFeatures: makeStandardStableLayout(14),
     extras: [
       { id: "window", name: "Window", price: 250, description: "Add a window to the stable" },
       { id: "partition", name: "Internal Partition", price: 550, description: "Divide the stable into two sections" },
@@ -67,8 +142,27 @@ export const MODULES: ModuleDef[] = [
     ],
   },
   {
-    id: "shelter_12_double",
-    name: "Shelter 12x12 (Double Doors)",
+    id: "stable_16x12",
+    name: "Stable 16x12",
+    kind: "stable",
+    widthFt: 16,
+    depthFt: 12,
+    rotations: [0, 90, 180, 270],
+    basePrice: 4800,
+    connectors: makeStraightConnectors(16, 12),
+    frontFeatures: makeStandardStableLayout(16),
+    extras: [
+      { id: "window", name: "Window", price: 250, description: "Add a window to the stable" },
+      { id: "partition", name: "Internal Partition", price: 600, description: "Divide the stable into two sections" },
+      { id: "feed_store", name: "Feed Store", price: 300, description: "Add feed storage area" },
+      { id: "hay_rack", name: "Hay Rack", price: 150, description: "Wall-mounted hay rack" },
+      { id: "water_trough", name: "Water Trough", price: 200, description: "Automatic water trough" },
+    ],
+  },
+  // Shelter - 12ft wide with 8ft opening in center, can have double doors
+  {
+    id: "shelter_12x12",
+    name: "Shelter 12x12",
     kind: "shelter",
     widthFt: 12,
     depthFt: 12,
@@ -76,22 +170,23 @@ export const MODULES: ModuleDef[] = [
     basePrice: 3600,
     connectors: makeStraightConnectors(12, 12),
     frontFeatures: [
+      { type: "panel", fromX: 0, toX: 2 }, // 2ft blank on left
       {
         type: "opening",
         fromX: 2,
-        toX: 10,
-        doors: [
-          { widthFt: 4, hinge: "left", swing: "out", leaf: "left" },
-          { widthFt: 4, hinge: "right", swing: "out", leaf: "right" },
-        ],
+        toX: 10, // 8ft opening (2ft to 10ft)
+        // No doors by default, but can be added as extra
       },
+      { type: "panel", fromX: 10, toX: "W" }, // 2ft blank on right
     ],
     extras: [
+      { id: "double_doors", name: "Double Doors", price: 450, description: "Add double doors to opening (4ft each, outward opening)" },
       { id: "side_panels", name: "Side Panels", price: 400, description: "Add side panels for wind protection" },
       { id: "feed_trough", name: "Feed Trough", price: 180, description: "Wall-mounted feed trough" },
       { id: "water_point", name: "Water Point", price: 250, description: "Water connection point" },
     ],
   },
+  // Corner Stable - 16x12 with corner connectors
   {
     id: "corner_16x12",
     name: "Corner Stable 16x12",
@@ -101,7 +196,7 @@ export const MODULES: ModuleDef[] = [
     rotations: [0, 90, 180, 270],
     basePrice: 5200,
     connectors: makeCornerConnectors(16, 12),
-    frontFeatures: [{ type: "opening", fromX: 12, toX: 16 }],
+    frontFeatures: makeStandardStableLayout(16),
     extras: [
       { id: "window", name: "Window", price: 250, description: "Add a window to the stable" },
       { id: "partition", name: "Internal Partition", price: 600, description: "Divide the stable into sections" },
@@ -110,6 +205,7 @@ export const MODULES: ModuleDef[] = [
       { id: "water_trough", name: "Water Trough", price: 200, description: "Automatic water trough" },
     ],
   },
+  // Tack Room
   {
     id: "tack_room_12x12",
     name: "Tack Room 12x12",
@@ -120,7 +216,7 @@ export const MODULES: ModuleDef[] = [
     basePrice: 4200,
     connectors: makeStraightConnectors(12, 12),
     frontFeatures: [
-      { type: "clad", fromX: 0, toX: 2 },
+      { type: "panel", fromX: 0, toX: 2 },
       {
         type: "opening",
         fromX: 2,

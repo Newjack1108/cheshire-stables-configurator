@@ -9,7 +9,8 @@ export type DoorLeaf = {
 
 export type FrontFeature =
   | { type: "clad" | "panel"; fromX: number; toX: number | "W" }
-  | { type: "opening"; fromX: number; toX: number; doors?: DoorLeaf[] };
+  | { type: "opening"; fromX: number; toX: number; doors?: DoorLeaf[] }
+  | { type: "window"; fromX: number; toX: number };
 
 export type ConnectorId = "W" | "E" | "N" | "S";
 

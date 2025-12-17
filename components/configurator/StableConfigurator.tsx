@@ -273,9 +273,120 @@ function renderDoor(
   return <g>{elements}</g>;
 }
 
+// Render window
+function renderWindow(
+  feature: FrontFeature,
+  widthFt: number,
+  depthFt: number,
+  rot: Rotation,
+  isSelected: boolean
+) {
+  if (feature.type !== "window") return null;
+
+  const { w, d } = rotatedSize(widthFt, depthFt, rot);
+  const frontFace = getFrontFace(rot);
+  
+  let windowStart: number;
+  let windowEnd: number;
+  
+  // Map window coordinates based on rotation
+  if (frontFace === "S") {
+    windowStart = feature.fromX;
+    windowEnd = feature.toX;
+  } else if (frontFace === "N") {
+    windowStart = widthFt - feature.toX;
+    windowEnd = widthFt - feature.fromX;
+  } else if (frontFace === "W") {
+    windowStart = feature.fromX;
+    windowEnd = feature.toX;
+  } else {
+    windowStart = depthFt - feature.toX;
+    windowEnd = depthFt - feature.fromX;
+  }
+
+  const elements: React.ReactElement[] = [];
+  const windowWidth = windowEnd - windowStart;
+
+  if (frontFace === "S" || frontFace === "N") {
+    // Horizontal edge
+    const y = frontFace === "S" ? d * FT_TO_PX : 0;
+    const yOffset = frontFace === "S" ? -WALL_THICKNESS * FT_TO_PX : WALL_THICKNESS * FT_TO_PX;
+    
+    // Window frame (rectangle with cross)
+    elements.push(
+      <rect
+        key="window-frame"
+        x={windowStart * FT_TO_PX}
+        y={frontFace === "S" ? y - WALL_THICKNESS * FT_TO_PX : y}
+        width={windowWidth * FT_TO_PX}
+        height={WALL_THICKNESS * FT_TO_PX}
+        fill={isSelected ? "#b3d9ff" : "#e6f3ff"}
+        stroke={isSelected ? "#0066cc" : "#4da6ff"}
+        strokeWidth={1}
+      />,
+      // Window cross (X pattern)
+      <line
+        key="window-cross-1"
+        x1={windowStart * FT_TO_PX}
+        y1={frontFace === "S" ? y - WALL_THICKNESS * FT_TO_PX : y}
+        x2={(windowStart + windowWidth) * FT_TO_PX}
+        y2={frontFace === "S" ? y : y + WALL_THICKNESS * FT_TO_PX}
+        stroke={isSelected ? "#0066cc" : "#4da6ff"}
+        strokeWidth={1}
+      />,
+      <line
+        key="window-cross-2"
+        x1={windowStart * FT_TO_PX}
+        y1={frontFace === "S" ? y : y + WALL_THICKNESS * FT_TO_PX}
+        x2={(windowStart + windowWidth) * FT_TO_PX}
+        y2={frontFace === "S" ? y - WALL_THICKNESS * FT_TO_PX : y}
+        stroke={isSelected ? "#0066cc" : "#4da6ff"}
+        strokeWidth={1}
+      />
+    );
+  } else {
+    // Vertical edge
+    const x = frontFace === "E" ? w * FT_TO_PX : 0;
+    const xOffset = frontFace === "E" ? WALL_THICKNESS * FT_TO_PX : -WALL_THICKNESS * FT_TO_PX;
+    
+    elements.push(
+      <rect
+        key="window-frame"
+        x={frontFace === "E" ? x : x - WALL_THICKNESS * FT_TO_PX}
+        y={windowStart * FT_TO_PX}
+        width={WALL_THICKNESS * FT_TO_PX}
+        height={windowWidth * FT_TO_PX}
+        fill={isSelected ? "#b3d9ff" : "#e6f3ff"}
+        stroke={isSelected ? "#0066cc" : "#4da6ff"}
+        strokeWidth={1}
+      />,
+      <line
+        key="window-cross-1"
+        x1={frontFace === "E" ? x : x - WALL_THICKNESS * FT_TO_PX}
+        y1={windowStart * FT_TO_PX}
+        x2={frontFace === "E" ? x + WALL_THICKNESS * FT_TO_PX : x}
+        y2={(windowStart + windowWidth) * FT_TO_PX}
+        stroke={isSelected ? "#0066cc" : "#4da6ff"}
+        strokeWidth={1}
+      />,
+      <line
+        key="window-cross-2"
+        x1={frontFace === "E" ? x : x - WALL_THICKNESS * FT_TO_PX}
+        y1={(windowStart + windowWidth) * FT_TO_PX}
+        x2={frontFace === "E" ? x + WALL_THICKNESS * FT_TO_PX : x}
+        y2={windowStart * FT_TO_PX}
+        stroke={isSelected ? "#0066cc" : "#4da6ff"}
+        strokeWidth={1}
+      />
+    );
+  }
+
+  return <g>{elements}</g>;
+}
+
 export default function StableConfigurator() {
   const [units, setUnits] = useState<PlacedUnit[]>([
-    { uid: uid(), moduleId: "stable_12x12", xFt: 0, yFt: 0, rot: 0, selectedExtras: [] },
+    { uid: uid(), moduleId: "stable_12x12", xFt: 0, yFt: 0, rot: 0, selectedExtras: [] }, // Start with standard 12x12 stable
   ]);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [selectedUid, setSelectedUid] = useState<string>(units[0].uid);
@@ -497,6 +608,54 @@ export default function StableConfigurator() {
             Add Modules
           </h3>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: "#666" }}>
+              Standard Stables
+            </div>
+            <button
+              onClick={() => attach("stable_6x12", "E")}
+              style={{
+                padding: "10px 16px",
+                backgroundColor: "#0066cc",
+                color: "white",
+                border: "none",
+                borderRadius: 6,
+                cursor: "pointer",
+                fontSize: 14,
+                fontWeight: 500,
+              }}
+            >
+              + Add Stable 6x12
+            </button>
+            <button
+              onClick={() => attach("stable_8x12", "E")}
+              style={{
+                padding: "10px 16px",
+                backgroundColor: "#0066cc",
+                color: "white",
+                border: "none",
+                borderRadius: 6,
+                cursor: "pointer",
+                fontSize: 14,
+                fontWeight: 500,
+              }}
+            >
+              + Add Stable 8x12
+            </button>
+            <button
+              onClick={() => attach("stable_10x12", "E")}
+              style={{
+                padding: "10px 16px",
+                backgroundColor: "#0066cc",
+                color: "white",
+                border: "none",
+                borderRadius: 6,
+                cursor: "pointer",
+                fontSize: 14,
+                fontWeight: 500,
+              }}
+            >
+              + Add Stable 10x12
+            </button>
             <button
               onClick={() => attach("stable_12x12", "E")}
               style={{
@@ -528,7 +687,25 @@ export default function StableConfigurator() {
               + Add Stable 14x12
             </button>
             <button
-              onClick={() => attach("shelter_12_double", "E")}
+              onClick={() => attach("stable_16x12", "E")}
+              style={{
+                padding: "10px 16px",
+                backgroundColor: "#0066cc",
+                color: "white",
+                border: "none",
+                borderRadius: 6,
+                cursor: "pointer",
+                fontSize: 14,
+                fontWeight: 500,
+              }}
+            >
+              + Add Stable 16x12
+            </button>
+            <div style={{ fontSize: 13, fontWeight: 600, marginTop: 12, marginBottom: 8, color: "#666" }}>
+              Other Modules
+            </div>
+            <button
+              onClick={() => attach("shelter_12x12", "E")}
               style={{
                 padding: "10px 16px",
                 backgroundColor: "#0066cc",
@@ -741,12 +918,36 @@ export default function StableConfigurator() {
                   fill="#999"
                 />
 
-                {/* Render doors and openings */}
+                {/* Render doors, windows, and openings */}
                 {m.frontFeatures.map((feature, idx) => {
+                  // Handle shelter with double doors extra
                   if (feature.type === "opening") {
+                    // Check if this is a shelter with double doors extra selected
+                    const hasDoubleDoors = 
+                      m.kind === "shelter" && 
+                      (u.selectedExtras || []).includes("double_doors");
+                    
+                    // If shelter has double doors extra, render doors
+                    const featureWithDoors = hasDoubleDoors && !feature.doors
+                      ? {
+                          ...feature,
+                          doors: [
+                            { widthFt: 4, hinge: "left" as const, swing: "out" as const, leaf: "left" as const },
+                            { widthFt: 4, hinge: "right" as const, swing: "out" as const, leaf: "right" as const },
+                          ],
+                        }
+                      : feature;
+                    
                     return (
                       <g key={idx}>
-                        {renderDoor(feature, m.widthFt, m.depthFt, u.rot, isSelected)}
+                        {renderDoor(featureWithDoors, m.widthFt, m.depthFt, u.rot, isSelected)}
+                      </g>
+                    );
+                  }
+                  if (feature.type === "window") {
+                    return (
+                      <g key={idx}>
+                        {renderWindow(feature, m.widthFt, m.depthFt, u.rot, isSelected)}
                       </g>
                     );
                   }
