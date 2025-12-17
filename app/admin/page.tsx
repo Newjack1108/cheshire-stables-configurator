@@ -129,3 +129,4 @@ export default function AdminPage() {
 
   return <AdminPanel onLogout={handleLogout} />;
 }
+

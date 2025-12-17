@@ -112,3 +112,4 @@ export default function AdminPanel({ onLogout }: AdminPanelProps) {
     </div>
   );
 }
+

@@ -13,9 +13,9 @@ export type FrontFeature =
   | { type: "window"; fromX: number; toX: number };
 
 // Building-type-specific connector IDs
-// Standard buildings: LEFT, RIGHT
-// Corner buildings: BACK, DOOR_SIDE_LEFT, DOOR_SIDE_RIGHT
-export type ConnectorId = "LEFT" | "RIGHT" | "BACK" | "DOOR_SIDE_LEFT" | "DOOR_SIDE_RIGHT";
+// Standard buildings: A, B (on opposite sides)
+// Corner buildings: C (on front panel next to door), D (on side nearest door)
+export type ConnectorId = "A" | "B" | "C" | "D";
 
 export type ConnectorDef = {
   id: ConnectorId;

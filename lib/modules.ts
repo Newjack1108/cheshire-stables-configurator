@@ -27,22 +27,26 @@ export function getPrice(moduleId: string, extraId?: string): number {
   return 0;
 }
 
-// Standard building connectors: LEFT and RIGHT
+// Standard building connectors: A and B on opposite sides
 const makeStraightConnectors = (w: number, d: number) => [
-  { id: "LEFT" as const, x: 0, y: d / 2, nx: -1, ny: 0 },
-  { id: "RIGHT" as const, x: w, y: d / 2, nx: 1, ny: 0 },
+  { id: "A" as const, x: 0, y: d / 2, nx: -1, ny: 0 }, // Left side
+  { id: "B" as const, x: w, y: d / 2, nx: 1, ny: 0 }, // Right side
 ];
 
-// Corner stable connectors: BACK connector at 10ft from left (center of 12ft blank), DOOR_SIDE_LEFT connector on left side
+// Corner stable connectors: 
+// C connector on front panel next to door (center of blank panel section)
+// D connector on side nearest door
 const makeCornerStableConnectors = (w: number, d: number) => [
-  { id: "BACK" as const, x: 10, y: d, nx: 0, ny: 1 }, // 10ft from left, 6ft from right, bottom edge
-  { id: "DOOR_SIDE_LEFT" as const, x: 0, y: d / 2, nx: -1, ny: 0 }, // Left side, center of depth (door side)
+  { id: "C" as const, x: 10, y: d, nx: 0, ny: 1 }, // Front panel, center of 12ft blank section (10ft from left)
+  { id: "D" as const, x: 0, y: d / 2, nx: -1, ny: 0 }, // Left side (nearest door)
 ];
 
-// RH Corner stable connectors: BACK connector at 6ft from left (center of 12ft blank on left side), DOOR_SIDE_RIGHT connector on right side
+// RH Corner stable connectors:
+// C connector on front panel next to door (center of blank panel section)
+// D connector on side nearest door
 const makeRHCornerStableConnectors = (w: number, d: number) => [
-  { id: "BACK" as const, x: 6, y: d, nx: 0, ny: 1 }, // 6ft from left, 10ft from right, bottom edge
-  { id: "DOOR_SIDE_RIGHT" as const, x: w, y: d / 2, nx: 1, ny: 0 }, // Right side, center of depth (door side)
+  { id: "C" as const, x: 6, y: d, nx: 0, ny: 1 }, // Front panel, center of 12ft blank section (6ft from left)
+  { id: "D" as const, x: w, y: d / 2, nx: 1, ny: 0 }, // Right side (nearest door)
 ];
 
 // Standard stable layout: 1ft blank + 4ft door + Xft blank + 2ft window + 1ft blank
