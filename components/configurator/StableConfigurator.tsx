@@ -568,44 +568,69 @@ export default function StableConfigurator() {
     if (!sourceUnit) return;
 
     const aMod = getModule(sourceUnit.moduleId);
-    const aDef = aMod.connectors.find((c) => c.id === targetConn);
-    if (!aDef) return alert("No connector");
-
-    if (isUsed(sourceUnit.uid, targetConn))
-      return alert("Connector already used");
-
-    const aW = connectorWorld(sourceUnit, aMod, aDef);
     const newMod = getModule(moduleId);
 
-    let best: {
+    // Try all available connectors on the target unit, not just the one specified
+    // This allows us to find the best compatible match
+    let bestOverall: {
       rot: Rotation;
       conn: ConnectorId;
+      targetConn: ConnectorId;
       x: number;
       y: number;
       score: number;
     } | null = null;
 
-    for (const rot of newMod.rotations) {
-      for (const c of newMod.connectors) {
-        const p = rotatePoint(
-          c.x,
-          c.y,
-          newMod.widthFt,
-          newMod.depthFt,
-          rot
-        );
-        const v = rotateVec(c.nx, c.ny, rot);
-        const dot = v.nx * aW.nx + v.ny * aW.ny;
-        const score = -dot;
-        const x = aW.x - p.x;
-        const y = aW.y - p.y;
-        if (!best || score < best.score) {
-          best = { rot, conn: c.id, x, y, score };
+    for (const targetConnCandidate of aMod.connectors) {
+      if (isUsed(sourceUnit.uid, targetConnCandidate.id)) continue;
+
+      const aDef = targetConnCandidate;
+      const aW = connectorWorld(sourceUnit, aMod, aDef);
+
+      let best: {
+        rot: Rotation;
+        conn: ConnectorId;
+        x: number;
+        y: number;
+        score: number;
+      } | null = null;
+
+      for (const rot of newMod.rotations) {
+        for (const c of newMod.connectors) {
+          const p = rotatePoint(
+            c.x,
+            c.y,
+            newMod.widthFt,
+            newMod.depthFt,
+            rot
+          );
+          const v = rotateVec(c.nx, c.ny, rot);
+          // Dot product: -1 means opposite directions (perfect match), 1 means same direction (bad)
+          // We want the most negative dot product (closest to -1)
+          const dot = v.nx * aW.nx + v.ny * aW.ny;
+          const x = aW.x - p.x;
+          const y = aW.y - p.y;
+          // For connectors to connect, they must face opposite directions (dot product should be -1)
+          // We want the most negative dot product (best match)
+          // Only consider if dot product is significantly negative (opposite-facing, dot < -0.7)
+          // This ensures we only match truly opposite-facing connectors
+          if (dot < -0.7 && (!best || dot < best.score)) {
+            best = { rot, conn: c.id, x, y, score: dot };
+          }
         }
+      }
+
+      // Keep track of the best match across all target connectors
+      if (best && (!bestOverall || best.score < bestOverall.score)) {
+        bestOverall = {
+          ...best,
+          targetConn: targetConnCandidate.id,
+        };
       }
     }
 
-    if (!best) return;
+    if (!bestOverall) return;
+    const best = bestOverall;
 
     const newUnit: PlacedUnit = {
       uid: uid(),
@@ -642,7 +667,7 @@ export default function StableConfigurator() {
       ...connections,
       {
         aUid: sourceUnit.uid,
-        aConn: targetConn,
+        aConn: best.targetConn,
         bUid: newUnit.uid,
         bConn: best.conn,
       },
@@ -715,12 +740,17 @@ export default function StableConfigurator() {
         
         const p = rotatePoint(c.x, c.y, unitMod.widthFt, unitMod.depthFt, rot);
         const v = rotateVec(c.nx, c.ny, rot);
+        // Dot product: -1 means opposite directions (perfect match), 1 means same direction (bad)
+        // We want the most negative dot product (closest to -1)
         const dot = v.nx * aW.nx + v.ny * aW.ny;
-        const score = -dot;
         const x = aW.x - p.x;
         const y = aW.y - p.y;
-        if (!best || score < best.score) {
-          best = { rot, conn: c.id, x, y, score };
+        // For connectors to connect, they must face opposite directions (dot product should be -1)
+        // We want the most negative dot product (best match)
+        // Only consider if dot product is significantly negative (opposite-facing, dot < -0.7)
+        // This ensures we only match truly opposite-facing connectors
+        if (dot < -0.7 && (!best || dot < best.score)) {
+          best = { rot, conn: c.id, x, y, score: dot };
         }
       }
     }
@@ -1246,189 +1276,456 @@ export default function StableConfigurator() {
     );
   }
 
+  const DARK_GREEN = "#1a5d1a";
+  const DARK_GREEN_HOVER = "#2d5a27";
+  const DARK_GREEN_ACTIVE = "#0f3d0f";
+
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "380px 1fr", gap: 20, padding: 20 }}>
-      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        <div>
-          <h2 style={{ margin: "0 0 16px 0", fontSize: 24, fontWeight: 600 }}>
-            Stable Configurator
-          </h2>
+    <div style={{ display: "grid", gridTemplateColumns: "400px 1fr", gap: 24, padding: 24, minHeight: "100vh", backgroundColor: "#f8f9fa" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+        {/* Logo and Header */}
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ 
+            display: "flex", 
+            alignItems: "center", 
+            gap: 12, 
+            marginBottom: 24,
+            paddingBottom: 20,
+            borderBottom: "2px solid #e0e0e0"
+          }}>
+            <div style={{
+              width: 56,
+              height: 56,
+              backgroundColor: DARK_GREEN,
+              borderRadius: 12,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "white",
+              fontSize: 24,
+              fontWeight: 700,
+              fontFamily: "Inter, sans-serif",
+              boxShadow: "0 2px 8px rgba(26, 93, 26, 0.2)"
+            }}>
+              SC
+            </div>
+            <div>
+              <h1 style={{ 
+                margin: 0, 
+                fontSize: 28, 
+                fontWeight: 700, 
+                color: "#1a1a1a",
+                fontFamily: "Inter, sans-serif",
+                letterSpacing: "-0.5px"
+              }}>
+                Stable Configurator
+              </h1>
+              <p style={{ 
+                margin: "4px 0 0 0", 
+                fontSize: 14, 
+                color: "#666",
+                fontFamily: "Inter, sans-serif"
+              }}>
+                Design your stable layout
+              </p>
+            </div>
+          </div>
           
-          <div style={{ marginBottom: 20, padding: 16, backgroundColor: "#f5f5f5", borderRadius: 8 }}>
-            <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>Total Cost</div>
-            <div style={{ fontSize: 32, fontWeight: 700, color: "#0066cc" }}>
+          <div style={{ 
+            marginBottom: 24, 
+            padding: 20, 
+            backgroundColor: "white", 
+            borderRadius: 12,
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.08)",
+            border: "1px solid #e0e0e0"
+          }}>
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: "#666", fontFamily: "Inter, sans-serif" }}>Total Cost</div>
+            <div style={{ fontSize: 36, fontWeight: 700, color: DARK_GREEN, fontFamily: "Inter, sans-serif" }}>
               £{totalCost.toLocaleString()}
             </div>
           </div>
         </div>
 
         <div>
-          <h3 style={{ margin: "0 0 12px 0", fontSize: 16, fontWeight: 600 }}>
+          <h3 style={{ 
+            margin: "0 0 16px 0", 
+            fontSize: 18, 
+            fontWeight: 600,
+            color: "#1a1a1a",
+            fontFamily: "Inter, sans-serif"
+          }}>
             Add Modules
           </h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: "#666" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ 
+              fontSize: 13, 
+              fontWeight: 600, 
+              marginBottom: 10, 
+              color: "#666",
+              textTransform: "uppercase",
+              letterSpacing: "0.5px",
+              fontFamily: "Inter, sans-serif"
+            }}>
               Standard Stables
             </div>
             <button
               onClick={() => attach("stable_6x12", "E")}
-              onMouseDown={() => handleButtonMouseDown("stable_6x12")}
               style={{
-                padding: "10px 16px",
-                backgroundColor: "#0066cc",
+                padding: "14px 20px",
+                backgroundColor: DARK_GREEN,
                 color: "white",
                 border: "none",
-                borderRadius: 6,
+                borderRadius: 8,
                 cursor: "grab",
-                fontSize: 14,
-                fontWeight: 500,
+                fontSize: 15,
+                fontWeight: 600,
+                fontFamily: "Inter, sans-serif",
+                transition: "all 0.2s ease",
+                boxShadow: "0 2px 4px rgba(26, 93, 26, 0.2)",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = DARK_GREEN_HOVER;
+                e.currentTarget.style.transform = "translateY(-1px)";
+                e.currentTarget.style.boxShadow = "0 4px 8px rgba(26, 93, 26, 0.3)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = DARK_GREEN;
+                e.currentTarget.style.transform = "translateY(0)";
+                e.currentTarget.style.boxShadow = "0 2px 4px rgba(26, 93, 26, 0.2)";
+              }}
+              onMouseDown={(e) => {
+                handleButtonMouseDown("stable_6x12");
+                e.currentTarget.style.backgroundColor = DARK_GREEN_ACTIVE;
+              }}
+              onMouseUp={(e) => {
+                e.currentTarget.style.backgroundColor = DARK_GREEN_HOVER;
               }}
             >
               + Add Stable 6x12
             </button>
             <button
               onClick={() => attach("stable_8x12", "E")}
-              onMouseDown={() => handleButtonMouseDown("stable_8x12")}
               style={{
-                padding: "10px 16px",
-                backgroundColor: "#0066cc",
+                padding: "14px 20px",
+                backgroundColor: DARK_GREEN,
                 color: "white",
                 border: "none",
-                borderRadius: 6,
+                borderRadius: 8,
                 cursor: "grab",
-                fontSize: 14,
-                fontWeight: 500,
+                fontSize: 15,
+                fontWeight: 600,
+                fontFamily: "Inter, sans-serif",
+                transition: "all 0.2s ease",
+                boxShadow: "0 2px 4px rgba(26, 93, 26, 0.2)",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = DARK_GREEN_HOVER;
+                e.currentTarget.style.transform = "translateY(-1px)";
+                e.currentTarget.style.boxShadow = "0 4px 8px rgba(26, 93, 26, 0.3)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = DARK_GREEN;
+                e.currentTarget.style.transform = "translateY(0)";
+                e.currentTarget.style.boxShadow = "0 2px 4px rgba(26, 93, 26, 0.2)";
+              }}
+              onMouseDown={(e) => {
+                handleButtonMouseDown("stable_8x12");
+                e.currentTarget.style.backgroundColor = DARK_GREEN_ACTIVE;
+              }}
+              onMouseUp={(e) => {
+                e.currentTarget.style.backgroundColor = DARK_GREEN_HOVER;
               }}
             >
               + Add Stable 8x12
             </button>
             <button
               onClick={() => attach("stable_10x12", "E")}
-              onMouseDown={() => handleButtonMouseDown("stable_10x12")}
               style={{
-                padding: "10px 16px",
-                backgroundColor: "#0066cc",
+                padding: "14px 20px",
+                backgroundColor: DARK_GREEN,
                 color: "white",
                 border: "none",
-                borderRadius: 6,
+                borderRadius: 8,
                 cursor: "grab",
-                fontSize: 14,
-                fontWeight: 500,
+                fontSize: 15,
+                fontWeight: 600,
+                fontFamily: "Inter, sans-serif",
+                transition: "all 0.2s ease",
+                boxShadow: "0 2px 4px rgba(26, 93, 26, 0.2)",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = DARK_GREEN_HOVER;
+                e.currentTarget.style.transform = "translateY(-1px)";
+                e.currentTarget.style.boxShadow = "0 4px 8px rgba(26, 93, 26, 0.3)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = DARK_GREEN;
+                e.currentTarget.style.transform = "translateY(0)";
+                e.currentTarget.style.boxShadow = "0 2px 4px rgba(26, 93, 26, 0.2)";
+              }}
+              onMouseDown={(e) => {
+                handleButtonMouseDown("stable_10x12");
+                e.currentTarget.style.backgroundColor = DARK_GREEN_ACTIVE;
+              }}
+              onMouseUp={(e) => {
+                e.currentTarget.style.backgroundColor = DARK_GREEN_HOVER;
               }}
             >
               + Add Stable 10x12
             </button>
             <button
               onClick={() => attach("stable_12x12", "E")}
-              onMouseDown={() => handleButtonMouseDown("stable_12x12")}
               style={{
-                padding: "10px 16px",
-                backgroundColor: "#0066cc",
+                padding: "14px 20px",
+                backgroundColor: DARK_GREEN,
                 color: "white",
                 border: "none",
-                borderRadius: 6,
+                borderRadius: 8,
                 cursor: "grab",
-                fontSize: 14,
-                fontWeight: 500,
+                fontSize: 15,
+                fontWeight: 600,
+                fontFamily: "Inter, sans-serif",
+                transition: "all 0.2s ease",
+                boxShadow: "0 2px 4px rgba(26, 93, 26, 0.2)",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = DARK_GREEN_HOVER;
+                e.currentTarget.style.transform = "translateY(-1px)";
+                e.currentTarget.style.boxShadow = "0 4px 8px rgba(26, 93, 26, 0.3)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = DARK_GREEN;
+                e.currentTarget.style.transform = "translateY(0)";
+                e.currentTarget.style.boxShadow = "0 2px 4px rgba(26, 93, 26, 0.2)";
+              }}
+              onMouseDown={(e) => {
+                handleButtonMouseDown("stable_12x12");
+                e.currentTarget.style.backgroundColor = DARK_GREEN_ACTIVE;
+              }}
+              onMouseUp={(e) => {
+                e.currentTarget.style.backgroundColor = DARK_GREEN_HOVER;
               }}
             >
               + Add Stable 12x12
             </button>
             <button
               onClick={() => attach("stable_14x12", "E")}
-              onMouseDown={() => handleButtonMouseDown("stable_14x12")}
               style={{
-                padding: "10px 16px",
-                backgroundColor: "#0066cc",
+                padding: "14px 20px",
+                backgroundColor: DARK_GREEN,
                 color: "white",
                 border: "none",
-                borderRadius: 6,
+                borderRadius: 8,
                 cursor: "grab",
-                fontSize: 14,
-                fontWeight: 500,
+                fontSize: 15,
+                fontWeight: 600,
+                fontFamily: "Inter, sans-serif",
+                transition: "all 0.2s ease",
+                boxShadow: "0 2px 4px rgba(26, 93, 26, 0.2)",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = DARK_GREEN_HOVER;
+                e.currentTarget.style.transform = "translateY(-1px)";
+                e.currentTarget.style.boxShadow = "0 4px 8px rgba(26, 93, 26, 0.3)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = DARK_GREEN;
+                e.currentTarget.style.transform = "translateY(0)";
+                e.currentTarget.style.boxShadow = "0 2px 4px rgba(26, 93, 26, 0.2)";
+              }}
+              onMouseDown={(e) => {
+                handleButtonMouseDown("stable_14x12");
+                e.currentTarget.style.backgroundColor = DARK_GREEN_ACTIVE;
+              }}
+              onMouseUp={(e) => {
+                e.currentTarget.style.backgroundColor = DARK_GREEN_HOVER;
               }}
             >
               + Add Stable 14x12
             </button>
             <button
               onClick={() => attach("stable_16x12", "E")}
-              onMouseDown={() => handleButtonMouseDown("stable_16x12")}
               style={{
-                padding: "10px 16px",
-                backgroundColor: "#0066cc",
+                padding: "14px 20px",
+                backgroundColor: DARK_GREEN,
                 color: "white",
                 border: "none",
-                borderRadius: 6,
+                borderRadius: 8,
                 cursor: "grab",
-                fontSize: 14,
-                fontWeight: 500,
+                fontSize: 15,
+                fontWeight: 600,
+                fontFamily: "Inter, sans-serif",
+                transition: "all 0.2s ease",
+                boxShadow: "0 2px 4px rgba(26, 93, 26, 0.2)",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = DARK_GREEN_HOVER;
+                e.currentTarget.style.transform = "translateY(-1px)";
+                e.currentTarget.style.boxShadow = "0 4px 8px rgba(26, 93, 26, 0.3)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = DARK_GREEN;
+                e.currentTarget.style.transform = "translateY(0)";
+                e.currentTarget.style.boxShadow = "0 2px 4px rgba(26, 93, 26, 0.2)";
+              }}
+              onMouseDown={(e) => {
+                handleButtonMouseDown("stable_16x12");
+                e.currentTarget.style.backgroundColor = DARK_GREEN_ACTIVE;
+              }}
+              onMouseUp={(e) => {
+                e.currentTarget.style.backgroundColor = DARK_GREEN_HOVER;
               }}
             >
               + Add Stable 16x12
             </button>
-            <div style={{ fontSize: 13, fontWeight: 600, marginTop: 12, marginBottom: 8, color: "#666" }}>
+            <div style={{ 
+              fontSize: 13, 
+              fontWeight: 600, 
+              marginTop: 16, 
+              marginBottom: 10, 
+              color: "#666",
+              textTransform: "uppercase",
+              letterSpacing: "0.5px",
+              fontFamily: "Inter, sans-serif"
+            }}>
               Other Modules
             </div>
             <button
               onClick={() => attach("shelter_12x12", "E")}
-              onMouseDown={() => handleButtonMouseDown("shelter_12x12")}
               style={{
-                padding: "10px 16px",
-                backgroundColor: "#0066cc",
+                padding: "14px 20px",
+                backgroundColor: DARK_GREEN,
                 color: "white",
                 border: "none",
-                borderRadius: 6,
+                borderRadius: 8,
                 cursor: "grab",
-                fontSize: 14,
-                fontWeight: 500,
+                fontSize: 15,
+                fontWeight: 600,
+                fontFamily: "Inter, sans-serif",
+                transition: "all 0.2s ease",
+                boxShadow: "0 2px 4px rgba(26, 93, 26, 0.2)",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = DARK_GREEN_HOVER;
+                e.currentTarget.style.transform = "translateY(-1px)";
+                e.currentTarget.style.boxShadow = "0 4px 8px rgba(26, 93, 26, 0.3)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = DARK_GREEN;
+                e.currentTarget.style.transform = "translateY(0)";
+                e.currentTarget.style.boxShadow = "0 2px 4px rgba(26, 93, 26, 0.2)";
+              }}
+              onMouseDown={(e) => {
+                handleButtonMouseDown("shelter_12x12");
+                e.currentTarget.style.backgroundColor = DARK_GREEN_ACTIVE;
+              }}
+              onMouseUp={(e) => {
+                e.currentTarget.style.backgroundColor = DARK_GREEN_HOVER;
               }}
             >
               + Add Shelter
             </button>
             <button
               onClick={() => attach("corner_16x12", "E")}
-              onMouseDown={() => handleButtonMouseDown("corner_16x12")}
               style={{
-                padding: "10px 16px",
-                backgroundColor: "#0066cc",
+                padding: "14px 20px",
+                backgroundColor: DARK_GREEN,
                 color: "white",
                 border: "none",
-                borderRadius: 6,
+                borderRadius: 8,
                 cursor: "grab",
-                fontSize: 14,
-                fontWeight: 500,
+                fontSize: 15,
+                fontWeight: 600,
+                fontFamily: "Inter, sans-serif",
+                transition: "all 0.2s ease",
+                boxShadow: "0 2px 4px rgba(26, 93, 26, 0.2)",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = DARK_GREEN_HOVER;
+                e.currentTarget.style.transform = "translateY(-1px)";
+                e.currentTarget.style.boxShadow = "0 4px 8px rgba(26, 93, 26, 0.3)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = DARK_GREEN;
+                e.currentTarget.style.transform = "translateY(0)";
+                e.currentTarget.style.boxShadow = "0 2px 4px rgba(26, 93, 26, 0.2)";
+              }}
+              onMouseDown={(e) => {
+                handleButtonMouseDown("corner_16x12");
+                e.currentTarget.style.backgroundColor = DARK_GREEN_ACTIVE;
+              }}
+              onMouseUp={(e) => {
+                e.currentTarget.style.backgroundColor = DARK_GREEN_HOVER;
               }}
             >
               + Add Corner Stable
             </button>
             <button
               onClick={() => attach("corner_rh_16x12", "E")}
-              onMouseDown={() => handleButtonMouseDown("corner_rh_16x12")}
               style={{
-                padding: "10px 16px",
-                backgroundColor: "#0066cc",
+                padding: "14px 20px",
+                backgroundColor: DARK_GREEN,
                 color: "white",
                 border: "none",
-                borderRadius: 6,
+                borderRadius: 8,
                 cursor: "grab",
-                fontSize: 14,
-                fontWeight: 500,
+                fontSize: 15,
+                fontWeight: 600,
+                fontFamily: "Inter, sans-serif",
+                transition: "all 0.2s ease",
+                boxShadow: "0 2px 4px rgba(26, 93, 26, 0.2)",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = DARK_GREEN_HOVER;
+                e.currentTarget.style.transform = "translateY(-1px)";
+                e.currentTarget.style.boxShadow = "0 4px 8px rgba(26, 93, 26, 0.3)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = DARK_GREEN;
+                e.currentTarget.style.transform = "translateY(0)";
+                e.currentTarget.style.boxShadow = "0 2px 4px rgba(26, 93, 26, 0.2)";
+              }}
+              onMouseDown={(e) => {
+                handleButtonMouseDown("corner_rh_16x12");
+                e.currentTarget.style.backgroundColor = DARK_GREEN_ACTIVE;
+              }}
+              onMouseUp={(e) => {
+                e.currentTarget.style.backgroundColor = DARK_GREEN_HOVER;
               }}
             >
               + Add RH Corner Stable
             </button>
             <button
               onClick={() => attach("tack_room_12x12", "E")}
-              onMouseDown={() => handleButtonMouseDown("tack_room_12x12")}
               style={{
-                padding: "10px 16px",
-                backgroundColor: "#0066cc",
+                padding: "14px 20px",
+                backgroundColor: DARK_GREEN,
                 color: "white",
                 border: "none",
-                borderRadius: 6,
+                borderRadius: 8,
                 cursor: "grab",
-                fontSize: 14,
-                fontWeight: 500,
+                fontSize: 15,
+                fontWeight: 600,
+                fontFamily: "Inter, sans-serif",
+                transition: "all 0.2s ease",
+                boxShadow: "0 2px 4px rgba(26, 93, 26, 0.2)",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = DARK_GREEN_HOVER;
+                e.currentTarget.style.transform = "translateY(-1px)";
+                e.currentTarget.style.boxShadow = "0 4px 8px rgba(26, 93, 26, 0.3)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = DARK_GREEN;
+                e.currentTarget.style.transform = "translateY(0)";
+                e.currentTarget.style.boxShadow = "0 2px 4px rgba(26, 93, 26, 0.2)";
+              }}
+              onMouseDown={(e) => {
+                handleButtonMouseDown("tack_room_12x12");
+                e.currentTarget.style.backgroundColor = DARK_GREEN_ACTIVE;
+              }}
+              onMouseUp={(e) => {
+                e.currentTarget.style.backgroundColor = DARK_GREEN_HOVER;
               }}
             >
               + Add Tack Room
@@ -1437,21 +1734,46 @@ export default function StableConfigurator() {
         </div>
 
         {selected && selectedModule && (
-          <div style={{ marginTop: 8 }}>
-            <h3 style={{ margin: "0 0 12px 0", fontSize: 16, fontWeight: 600 }}>
+          <div style={{ 
+            marginTop: 8,
+            padding: 20,
+            backgroundColor: "white",
+            borderRadius: 12,
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.08)",
+            border: "1px solid #e0e0e0"
+          }}>
+            <h3 style={{ 
+              margin: "0 0 16px 0", 
+              fontSize: 18, 
+              fontWeight: 600,
+              color: "#1a1a1a",
+              fontFamily: "Inter, sans-serif"
+            }}>
               Selected: {selectedModule.name}
             </h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
               <button
                 onClick={rotateSelected}
                 style={{
-                  padding: "8px 16px",
-                  backgroundColor: "#666",
+                  padding: "12px 20px",
+                  backgroundColor: "#4a5568",
                   color: "white",
                   border: "none",
-                  borderRadius: 6,
+                  borderRadius: 8,
                   cursor: "pointer",
-                  fontSize: 14,
+                  fontSize: 15,
+                  fontWeight: 600,
+                  fontFamily: "Inter, sans-serif",
+                  transition: "all 0.2s ease",
+                  boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = "#5a6578";
+                  e.currentTarget.style.transform = "translateY(-1px)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = "#4a5568";
+                  e.currentTarget.style.transform = "translateY(0)";
                 }}
               >
                 Rotate
@@ -1459,13 +1781,25 @@ export default function StableConfigurator() {
               <button
                 onClick={() => deleteUnit(selected.uid)}
                 style={{
-                  padding: "8px 16px",
-                  backgroundColor: "#cc0000",
+                  padding: "12px 20px",
+                  backgroundColor: "#dc2626",
                   color: "white",
                   border: "none",
-                  borderRadius: 6,
+                  borderRadius: 8,
                   cursor: "pointer",
-                  fontSize: 14,
+                  fontSize: 15,
+                  fontWeight: 600,
+                  fontFamily: "Inter, sans-serif",
+                  transition: "all 0.2s ease",
+                  boxShadow: "0 2px 4px rgba(220, 38, 38, 0.2)",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = "#ef4444";
+                  e.currentTarget.style.transform = "translateY(-1px)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = "#dc2626";
+                  e.currentTarget.style.transform = "translateY(0)";
                 }}
               >
                 Delete
@@ -1473,7 +1807,13 @@ export default function StableConfigurator() {
             </div>
 
             <div>
-              <h4 style={{ margin: "0 0 8px 0", fontSize: 14, fontWeight: 600 }}>
+              <h4 style={{ 
+                margin: "0 0 12px 0", 
+                fontSize: 16, 
+                fontWeight: 600,
+                color: "#1a1a1a",
+                fontFamily: "Inter, sans-serif"
+              }}>
                 Extras
               </h4>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -1485,12 +1825,26 @@ export default function StableConfigurator() {
                       style={{
                         display: "flex",
                         alignItems: "center",
-                        gap: 8,
-                        padding: 8,
-                        backgroundColor: isSelected ? "#e6f2ff" : "white",
-                        border: `1px solid ${isSelected ? "#0066cc" : "#ddd"}`,
-                        borderRadius: 4,
+                        gap: 12,
+                        padding: 12,
+                        backgroundColor: isSelected ? "#e8f5e9" : "white",
+                        border: `2px solid ${isSelected ? DARK_GREEN : "#e0e0e0"}`,
+                        borderRadius: 8,
                         cursor: "pointer",
+                        transition: "all 0.2s ease",
+                        fontFamily: "Inter, sans-serif",
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isSelected) {
+                          e.currentTarget.style.borderColor = "#c0c0c0";
+                          e.currentTarget.style.backgroundColor = "#f5f5f5";
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isSelected) {
+                          e.currentTarget.style.borderColor = "#e0e0e0";
+                          e.currentTarget.style.backgroundColor = "white";
+                        }
                       }}
                     >
                       <input
@@ -1500,16 +1854,16 @@ export default function StableConfigurator() {
                         style={{ cursor: "pointer" }}
                       />
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 13, fontWeight: 500 }}>
+                        <div style={{ fontSize: 14, fontWeight: 500, color: "#1a1a1a", fontFamily: "Inter, sans-serif" }}>
                           {extra.name}
                         </div>
                         {extra.description && (
-                          <div style={{ fontSize: 11, color: "#666", marginTop: 2 }}>
+                          <div style={{ fontSize: 12, color: "#666", marginTop: 4, fontFamily: "Inter, sans-serif" }}>
                             {extra.description}
                           </div>
                         )}
                       </div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "#0066cc" }}>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: DARK_GREEN, fontFamily: "Inter, sans-serif" }}>
                         +£{extra.price}
                       </div>
                     </label>
@@ -1521,8 +1875,15 @@ export default function StableConfigurator() {
         )}
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div style={{ 
+          fontSize: 22, 
+          fontWeight: 700, 
+          marginBottom: 12,
+          color: "#1a1a1a",
+          fontFamily: "Inter, sans-serif",
+          letterSpacing: "-0.3px"
+        }}>
           Plan View
         </div>
         <svg
@@ -1530,7 +1891,13 @@ export default function StableConfigurator() {
           width="100%"
           height="600"
           viewBox={`${(ext.minX - 15) * FT_TO_PX} ${(ext.minY - 15) * FT_TO_PX} ${(ext.maxX - ext.minX + 30) * FT_TO_PX} ${(ext.maxY - ext.minY + 30) * FT_TO_PX}`}
-          style={{ border: "2px solid #ccc", borderRadius: 8, backgroundColor: "#fafafa", cursor: draggingModuleId || draggingUnitUid ? "grabbing" : "default" }}
+          style={{ 
+            border: "2px solid #d0d0d0", 
+            borderRadius: 12, 
+            backgroundColor: "#ffffff", 
+            cursor: draggingModuleId || draggingUnitUid ? "grabbing" : "default",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.08)"
+          }}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseLeave}
