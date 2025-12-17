@@ -1388,6 +1388,25 @@ export default function StableConfigurator() {
     };
   }, [draggingModuleId, draggingUnitUid, dragPosition, dragOffset, snappedConnector, units]);
 
+  // Handle wheel events for zooming (with passive: false to allow preventDefault)
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+
+    function handleWheel(e: WheelEvent) {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.1 : 0.1;
+      const newZoom = Math.max(0.25, Math.min(4, zoomLevel + delta));
+      setZoomLevel(newZoom);
+    }
+
+    svg.addEventListener("wheel", handleWheel, { passive: false });
+
+    return () => {
+      svg.removeEventListener("wheel", handleWheel);
+    };
+  }, [zoomLevel]);
+
   // Render drag preview
   function renderDragPreview() {
     if ((!draggingModuleId && !draggingUnitUid) || !dragPosition) return null;
@@ -2592,12 +2611,6 @@ export default function StableConfigurator() {
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseLeave}
-          onWheel={(e) => {
-            e.preventDefault();
-            const delta = e.deltaY > 0 ? -0.1 : 0.1;
-            const newZoom = Math.max(0.25, Math.min(4, zoomLevel + delta));
-            setZoomLevel(newZoom);
-          }}
         >
           {/* Grid */}
           <defs>
