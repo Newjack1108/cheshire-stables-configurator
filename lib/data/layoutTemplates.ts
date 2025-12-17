@@ -46,8 +46,8 @@ export const DEFAULT_TEMPLATES: LayoutTemplate[] = [
       { uid: "row3", moduleId: "stable_12x12", xFt: 24, yFt: 0, rot: 0, selectedExtras: [] },
     ],
     connections: [
-      { aUid: "row1", aConn: "E", bUid: "row2", bConn: "W" },
-      { aUid: "row2", aConn: "E", bUid: "row3", bConn: "W" },
+      { aUid: "row1", aConn: "RIGHT", bUid: "row2", bConn: "LEFT" },
+      { aUid: "row2", aConn: "RIGHT", bUid: "row3", bConn: "LEFT" },
     ],
   },
   {
