@@ -3,7 +3,12 @@
 import { useState, useEffect } from "react";
 import { MODULES } from "@/lib/modules";
 
-const defaultPricing = {
+type PricingData = {
+  modules: Record<string, number>;
+  extras: Record<string, number>;
+};
+
+const defaultPricing: PricingData = {
   modules: {
     stable_6x12: 2800,
     stable_8x12: 3200,
@@ -35,7 +40,7 @@ const defaultPricing = {
 };
 
 export default function PricingManager() {
-  const [pricing, setPricing] = useState(defaultPricing);
+  const [pricing, setPricing] = useState<PricingData>(defaultPricing);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
@@ -43,7 +48,8 @@ export default function PricingManager() {
     const saved = localStorage.getItem("stable_configurator_pricing");
     if (saved) {
       try {
-        setPricing(JSON.parse(saved));
+        const parsed = JSON.parse(saved) as PricingData;
+        setPricing(parsed);
       } catch {
         // Use default
         setPricing(defaultPricing);
