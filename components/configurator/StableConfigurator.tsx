@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
 import { MODULES } from "@/lib/modules";
 import {
   rotatedSize,
@@ -306,12 +306,163 @@ function renderWindow(
   return <g>{elements}</g>;
 }
 
+// Render preview door opening (simplified for preview)
+function renderPreviewDoor(
+  feature: FrontFeature,
+  widthFt: number,
+  depthFt: number,
+  rot: Rotation
+) {
+  if (feature.type !== "opening") return null;
+
+  const { w, d } = rotatedSize(widthFt, depthFt, rot);
+  const frontFace = getFrontFace(rot);
+  
+  let openingStart: number;
+  let openingEnd: number;
+  
+  if (frontFace === "S") {
+    openingStart = feature.fromX;
+    openingEnd = feature.toX;
+  } else if (frontFace === "N") {
+    openingStart = widthFt - feature.toX;
+    openingEnd = widthFt - feature.fromX;
+  } else if (frontFace === "W") {
+    openingStart = feature.fromX;
+    openingEnd = feature.toX;
+  } else {
+    openingStart = depthFt - feature.toX;
+    openingEnd = depthFt - feature.fromX;
+  }
+
+  const gapIndicatorLength = 4;
+  if (frontFace === "S" || frontFace === "N") {
+    const y = frontFace === "S" ? d * FT_TO_PX : 0;
+    const yOffset = frontFace === "S" ? -gapIndicatorLength : gapIndicatorLength;
+    
+    return (
+      <g>
+        <line
+          x1={openingStart * FT_TO_PX}
+          y1={y}
+          x2={openingStart * FT_TO_PX}
+          y2={y + yOffset}
+          stroke="#333"
+          strokeWidth={STROKE}
+        />
+        <line
+          x1={openingEnd * FT_TO_PX}
+          y1={y}
+          x2={openingEnd * FT_TO_PX}
+          y2={y + yOffset}
+          stroke="#333"
+          strokeWidth={STROKE}
+        />
+      </g>
+    );
+  } else {
+    const x = frontFace === "E" ? w * FT_TO_PX : 0;
+    const xOffset = frontFace === "E" ? gapIndicatorLength : -gapIndicatorLength;
+    
+    return (
+      <g>
+        <line
+          x1={x}
+          y1={openingStart * FT_TO_PX}
+          x2={x + xOffset}
+          y2={openingStart * FT_TO_PX}
+          stroke="#333"
+          strokeWidth={STROKE}
+        />
+        <line
+          x1={x}
+          y1={openingEnd * FT_TO_PX}
+          x2={x + xOffset}
+          y2={openingEnd * FT_TO_PX}
+          stroke="#333"
+          strokeWidth={STROKE}
+        />
+      </g>
+    );
+  }
+}
+
+// Render preview window (simplified for preview)
+function renderPreviewWindow(
+  feature: FrontFeature,
+  widthFt: number,
+  depthFt: number,
+  rot: Rotation
+) {
+  if (feature.type !== "window") return null;
+
+  const { w, d } = rotatedSize(widthFt, depthFt, rot);
+  const frontFace = getFrontFace(rot);
+  
+  let windowStart: number;
+  let windowEnd: number;
+  
+  if (frontFace === "S") {
+    windowStart = feature.fromX;
+    windowEnd = feature.toX;
+  } else if (frontFace === "N") {
+    windowStart = widthFt - feature.toX;
+    windowEnd = widthFt - feature.fromX;
+  } else if (frontFace === "W") {
+    windowStart = feature.fromX;
+    windowEnd = feature.toX;
+  } else {
+    windowStart = depthFt - feature.toX;
+    windowEnd = depthFt - feature.fromX;
+  }
+
+  const windowWidth = windowEnd - windowStart;
+
+  if (frontFace === "S" || frontFace === "N") {
+    const y = frontFace === "S" ? d * FT_TO_PX : 0;
+    
+    return (
+      <rect
+        x={windowStart * FT_TO_PX}
+        y={frontFace === "S" ? y - WALL_THICKNESS * FT_TO_PX : y}
+        width={windowWidth * FT_TO_PX}
+        height={WALL_THICKNESS * FT_TO_PX}
+        fill="#ffffff"
+        opacity={0.8}
+      />
+    );
+  } else {
+    const x = frontFace === "E" ? w * FT_TO_PX : 0;
+    
+    return (
+      <rect
+        x={frontFace === "E" ? x : x - WALL_THICKNESS * FT_TO_PX}
+        y={windowStart * FT_TO_PX}
+        width={WALL_THICKNESS * FT_TO_PX}
+        height={windowWidth * FT_TO_PX}
+        fill="#ffffff"
+        opacity={0.8}
+      />
+    );
+  }
+}
+
+const KELLY_GREEN = "#4CBB17";
+const SNAP_DISTANCE = 2; // feet
+
 export default function StableConfigurator() {
   const [units, setUnits] = useState<PlacedUnit[]>([
     { uid: uid(), moduleId: "stable_12x12", xFt: 0, yFt: 0, rot: 0, selectedExtras: [] }, // Start with standard 12x12 stable
   ]);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [selectedUid, setSelectedUid] = useState<string>(units[0].uid);
+  
+  // Drag state
+  const [draggingModuleId, setDraggingModuleId] = useState<string | null>(null);
+  const [draggingUnitUid, setDraggingUnitUid] = useState<string | null>(null);
+  const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
+  const [snappedConnector, setSnappedConnector] = useState<{ uid: string; connId: ConnectorId } | null>(null);
+  const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null);
 
   const selected = units.find((u) => u.uid === selectedUid);
 
@@ -323,17 +474,51 @@ export default function StableConfigurator() {
     );
   }
 
-  function attach(moduleId: string, targetConn: ConnectorId) {
-    if (!selected) return;
+  // Convert SVG screen coordinates to world (feet) coordinates
+  function screenToWorld(svg: SVGSVGElement, clientX: number, clientY: number): { x: number; y: number } {
+    const pt = svg.createSVGPoint();
+    pt.x = clientX;
+    pt.y = clientY;
+    const svgPt = pt.matrixTransform(svg.getScreenCTM()!.inverse());
+    return { x: svgPt.x / FT_TO_PX, y: svgPt.y / FT_TO_PX };
+  }
 
-    const aMod = getModule(selected.moduleId);
+  // Find nearest available connector within snap distance
+  function findNearestConnector(x: number, y: number): { uid: string; connId: ConnectorId; distance: number } | null {
+    let nearest: { uid: string; connId: ConnectorId; distance: number } | null = null;
+    const snapDistFt = SNAP_DISTANCE;
+
+    for (const u of units) {
+      const m = getModule(u.moduleId);
+      for (const conn of m.connectors) {
+        if (isUsed(u.uid, conn.id)) continue;
+        
+        const connWorld = connectorWorld(u, m, conn);
+        const dx = connWorld.x - x;
+        const dy = connWorld.y - y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        
+        if (dist < snapDistFt && (!nearest || dist < nearest.distance)) {
+          nearest = { uid: u.uid, connId: conn.id, distance: dist };
+        }
+      }
+    }
+
+    return nearest;
+  }
+
+  function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUnit) {
+    const sourceUnit = targetUnit || selected;
+    if (!sourceUnit) return;
+
+    const aMod = getModule(sourceUnit.moduleId);
     const aDef = aMod.connectors.find((c) => c.id === targetConn);
     if (!aDef) return alert("No connector");
 
-    if (isUsed(selected.uid, targetConn))
+    if (isUsed(sourceUnit.uid, targetConn))
       return alert("Connector already used");
 
-    const aW = connectorWorld(selected, aMod, aDef);
+    const aW = connectorWorld(sourceUnit, aMod, aDef);
     const newMod = getModule(moduleId);
 
     let best: {
@@ -400,7 +585,7 @@ export default function StableConfigurator() {
     setConnections([
       ...connections,
       {
-        aUid: selected.uid,
+        aUid: sourceUnit.uid,
         aConn: targetConn,
         bUid: newUnit.uid,
         bConn: best.conn,
@@ -497,6 +682,103 @@ export default function StableConfigurator() {
     }
   }
 
+  // Drag handlers
+  function handleDragStart(moduleId: string) {
+    setDraggingModuleId(moduleId);
+  }
+
+  function handleButtonMouseDown(moduleId: string) {
+    setDraggingModuleId(moduleId);
+  }
+
+  function handleMouseMove(e: React.MouseEvent<SVGSVGElement>) {
+    if (!draggingModuleId && !draggingUnitUid) return;
+    
+    const svg = e.currentTarget;
+    const worldPos = screenToWorld(svg, e.clientX, e.clientY);
+    setDragPosition(worldPos);
+
+    if (draggingModuleId) {
+      // Find nearest connector for snapping
+      const nearest = findNearestConnector(worldPos.x, worldPos.y);
+      setSnappedConnector(nearest ? { uid: nearest.uid, connId: nearest.connId } : null);
+    } else if (draggingUnitUid) {
+      // For repositioning, check for overlaps
+      setSnappedConnector(null);
+    }
+  }
+
+  function handleMouseUp(e: React.MouseEvent<SVGSVGElement>) {
+    if (draggingModuleId && dragPosition) {
+      const svg = e.currentTarget;
+      const worldPos = screenToWorld(svg, e.clientX, e.clientY);
+      
+      if (snappedConnector) {
+        // Attach to connector
+        const targetUnit = units.find((u) => u.uid === snappedConnector.uid);
+        if (targetUnit) {
+          attach(draggingModuleId, snappedConnector.connId, targetUnit);
+        }
+      } else {
+        // Place in free space (optional - could require connector attachment)
+        // For now, we'll only allow placement via connectors
+      }
+      
+      setDraggingModuleId(null);
+      setDragPosition(null);
+      setSnappedConnector(null);
+    } else if (draggingUnitUid && dragPosition && dragOffset) {
+      // Reposition existing unit
+      const newX = dragPosition.x - dragOffset.x;
+      const newY = dragPosition.y - dragOffset.y;
+      
+      const unit = units.find((u) => u.uid === draggingUnitUid);
+      if (unit) {
+        const m = getModule(unit.moduleId);
+        const newUnit: PlacedUnit = { ...unit, xFt: newX, yFt: newY };
+        const bNew = bbox(newUnit, m);
+        
+        // Check for overlaps
+        let hasOverlap = false;
+        for (const u of units) {
+          if (u.uid === draggingUnitUid) continue;
+          const bExisting = bbox(u, getModule(u.moduleId));
+          if (overlaps(bNew, bExisting)) {
+            hasOverlap = true;
+            break;
+          }
+        }
+        
+        if (!hasOverlap) {
+          setUnits(units.map((u) => (u.uid === draggingUnitUid ? newUnit : u)));
+        }
+      }
+      
+      setDraggingUnitUid(null);
+      setDragPosition(null);
+      setDragOffset(null);
+    }
+  }
+
+  function handleMouseLeave() {
+    // Cancel drag if mouse leaves SVG
+    setDraggingModuleId(null);
+    setDraggingUnitUid(null);
+    setDragPosition(null);
+    setSnappedConnector(null);
+    setDragOffset(null);
+  }
+
+  function handleUnitMouseDown(e: React.MouseEvent<SVGGElement>, unit: PlacedUnit) {
+    e.stopPropagation();
+    const svg = e.currentTarget.ownerSVGElement!;
+    const worldPos = screenToWorld(svg, e.clientX, e.clientY);
+    setDraggingUnitUid(unit.uid);
+    setDragOffset({ x: worldPos.x - unit.xFt, y: worldPos.y - unit.yFt });
+    setDragPosition(worldPos);
+    setSelectedUid(unit.uid);
+  }
+
   const totalCost = useMemo(() => {
     let cost = 0;
     for (const u of units) {
@@ -533,6 +815,182 @@ export default function StableConfigurator() {
   }, [units]);
 
   const selectedModule = selected ? getModule(selected.moduleId) : null;
+  const svgRef = useRef<SVGSVGElement>(null);
+
+  // Handle document-level mouse events for dragging from buttons
+  useEffect(() => {
+    if (!draggingModuleId && !draggingUnitUid) return;
+
+    function handleDocumentMouseMove(e: MouseEvent) {
+      if (!svgRef.current) return;
+      
+      const svg = svgRef.current;
+      const rect = svg.getBoundingClientRect();
+      
+      // Only process if mouse is over SVG
+      if (e.clientX < rect.left || e.clientX > rect.right || 
+          e.clientY < rect.top || e.clientY > rect.bottom) {
+        return;
+      }
+
+      const worldPos = screenToWorld(svg, e.clientX, e.clientY);
+      setDragPosition(worldPos);
+
+      if (draggingModuleId) {
+        const nearest = findNearestConnector(worldPos.x, worldPos.y);
+        setSnappedConnector(nearest ? { uid: nearest.uid, connId: nearest.connId } : null);
+      } else if (draggingUnitUid) {
+        setSnappedConnector(null);
+      }
+    }
+
+    function handleDocumentMouseUp(e: MouseEvent) {
+      if (draggingModuleId && dragPosition && svgRef.current) {
+        const svg = svgRef.current;
+        const rect = svg.getBoundingClientRect();
+        
+        // Only process if mouse is over SVG
+        if (e.clientX >= rect.left && e.clientX <= rect.right && 
+            e.clientY >= rect.top && e.clientY <= rect.bottom) {
+          const worldPos = screenToWorld(svg, e.clientX, e.clientY);
+          
+          if (snappedConnector) {
+            const targetUnit = units.find((u) => u.uid === snappedConnector.uid);
+            if (targetUnit) {
+              attach(draggingModuleId, snappedConnector.connId, targetUnit);
+            }
+          }
+        }
+        
+        setDraggingModuleId(null);
+        setDragPosition(null);
+        setSnappedConnector(null);
+      } else if (draggingUnitUid && dragPosition && dragOffset && svgRef.current) {
+        const svg = svgRef.current;
+        const rect = svg.getBoundingClientRect();
+        
+        if (e.clientX >= rect.left && e.clientX <= rect.right && 
+            e.clientY >= rect.top && e.clientY <= rect.bottom) {
+          const worldPos = screenToWorld(svg, e.clientX, e.clientY);
+          const newX = worldPos.x - dragOffset.x;
+          const newY = worldPos.y - dragOffset.y;
+          
+          const unit = units.find((u) => u.uid === draggingUnitUid);
+          if (unit) {
+            const m = getModule(unit.moduleId);
+            const newUnit: PlacedUnit = { ...unit, xFt: newX, yFt: newY };
+            const bNew = bbox(newUnit, m);
+            
+            let hasOverlap = false;
+            for (const u of units) {
+              if (u.uid === draggingUnitUid) continue;
+              const bExisting = bbox(u, getModule(u.moduleId));
+              if (overlaps(bNew, bExisting)) {
+                hasOverlap = true;
+                break;
+              }
+            }
+            
+            if (!hasOverlap) {
+              setUnits(units.map((u) => (u.uid === draggingUnitUid ? newUnit : u)));
+            }
+          }
+        }
+        
+        setDraggingUnitUid(null);
+        setDragPosition(null);
+        setDragOffset(null);
+      }
+    }
+
+    document.addEventListener("mousemove", handleDocumentMouseMove);
+    document.addEventListener("mouseup", handleDocumentMouseUp);
+
+    return () => {
+      document.removeEventListener("mousemove", handleDocumentMouseMove);
+      document.removeEventListener("mouseup", handleDocumentMouseUp);
+    };
+  }, [draggingModuleId, draggingUnitUid, dragPosition, dragOffset, snappedConnector, units]);
+
+  // Render drag preview
+  function renderDragPreview() {
+    if (!draggingModuleId || !dragPosition) return null;
+
+    const m = getModule(draggingModuleId);
+    let previewX = dragPosition.x;
+    let previewY = dragPosition.y;
+    let previewRot: Rotation = 0;
+
+    // If snapped to connector, calculate position
+    if (snappedConnector) {
+      const targetUnit = units.find((u) => u.uid === snappedConnector.uid);
+      if (targetUnit) {
+        const targetMod = getModule(targetUnit.moduleId);
+        const targetConn = targetMod.connectors.find((c) => c.id === snappedConnector.connId);
+        if (targetConn) {
+          const aW = connectorWorld(targetUnit, targetMod, targetConn);
+          
+          // Find best rotation and connector match
+          let best: { rot: Rotation; conn: ConnectorId; x: number; y: number; score: number } | null = null;
+          for (const rot of m.rotations) {
+            for (const c of m.connectors) {
+              const p = rotatePoint(c.x, c.y, m.widthFt, m.depthFt, rot);
+              const v = rotateVec(c.nx, c.ny, rot);
+              const dot = v.nx * aW.nx + v.ny * aW.ny;
+              const score = -dot;
+              const x = aW.x - p.x;
+              const y = aW.y - p.y;
+              if (!best || score < best.score) {
+                best = { rot, conn: c.id, x, y, score };
+              }
+            }
+          }
+          if (best) {
+            previewX = best.x;
+            previewY = best.y;
+            previewRot = best.rot;
+          }
+        }
+      }
+    }
+
+    const { w, d } = rotatedSize(m.widthFt, m.depthFt, previewRot);
+
+    return (
+      <g
+        transform={`translate(${previewX * FT_TO_PX}, ${previewY * FT_TO_PX})`}
+        opacity={0.65}
+      >
+        {/* Main rectangle - kelly green, no outline */}
+        <rect
+          x={0}
+          y={0}
+          width={w * FT_TO_PX}
+          height={d * FT_TO_PX}
+          fill={KELLY_GREEN}
+        />
+        
+        {/* Render door and window indicators */}
+        {m.frontFeatures.map((feature, idx) => {
+          if (feature.type === "opening") {
+            return (
+              <g key={`preview-door-${idx}`}>
+                {renderPreviewDoor(feature, m.widthFt, m.depthFt, previewRot)}
+              </g>
+            );
+          }
+          if (feature.type === "window") {
+            return (
+              <g key={`preview-window-${idx}`}>
+                {renderPreviewWindow(feature, m.widthFt, m.depthFt, previewRot)}
+              </g>
+            );
+          }
+          return null;
+        })}
+      </g>
+    );
+  }
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "380px 1fr", gap: 20, padding: 20 }}>
@@ -560,13 +1018,14 @@ export default function StableConfigurator() {
             </div>
             <button
               onClick={() => attach("stable_6x12", "E")}
+              onMouseDown={() => handleButtonMouseDown("stable_6x12")}
               style={{
                 padding: "10px 16px",
                 backgroundColor: "#0066cc",
                 color: "white",
                 border: "none",
                 borderRadius: 6,
-                cursor: "pointer",
+                cursor: "grab",
                 fontSize: 14,
                 fontWeight: 500,
               }}
@@ -575,13 +1034,14 @@ export default function StableConfigurator() {
             </button>
             <button
               onClick={() => attach("stable_8x12", "E")}
+              onMouseDown={() => handleButtonMouseDown("stable_8x12")}
               style={{
                 padding: "10px 16px",
                 backgroundColor: "#0066cc",
                 color: "white",
                 border: "none",
                 borderRadius: 6,
-                cursor: "pointer",
+                cursor: "grab",
                 fontSize: 14,
                 fontWeight: 500,
               }}
@@ -590,13 +1050,14 @@ export default function StableConfigurator() {
             </button>
             <button
               onClick={() => attach("stable_10x12", "E")}
+              onMouseDown={() => handleButtonMouseDown("stable_10x12")}
               style={{
                 padding: "10px 16px",
                 backgroundColor: "#0066cc",
                 color: "white",
                 border: "none",
                 borderRadius: 6,
-                cursor: "pointer",
+                cursor: "grab",
                 fontSize: 14,
                 fontWeight: 500,
               }}
@@ -605,13 +1066,14 @@ export default function StableConfigurator() {
             </button>
             <button
               onClick={() => attach("stable_12x12", "E")}
+              onMouseDown={() => handleButtonMouseDown("stable_12x12")}
               style={{
                 padding: "10px 16px",
                 backgroundColor: "#0066cc",
                 color: "white",
                 border: "none",
                 borderRadius: 6,
-                cursor: "pointer",
+                cursor: "grab",
                 fontSize: 14,
                 fontWeight: 500,
               }}
@@ -620,13 +1082,14 @@ export default function StableConfigurator() {
             </button>
             <button
               onClick={() => attach("stable_14x12", "E")}
+              onMouseDown={() => handleButtonMouseDown("stable_14x12")}
               style={{
                 padding: "10px 16px",
                 backgroundColor: "#0066cc",
                 color: "white",
                 border: "none",
                 borderRadius: 6,
-                cursor: "pointer",
+                cursor: "grab",
                 fontSize: 14,
                 fontWeight: 500,
               }}
@@ -635,13 +1098,14 @@ export default function StableConfigurator() {
             </button>
             <button
               onClick={() => attach("stable_16x12", "E")}
+              onMouseDown={() => handleButtonMouseDown("stable_16x12")}
               style={{
                 padding: "10px 16px",
                 backgroundColor: "#0066cc",
                 color: "white",
                 border: "none",
                 borderRadius: 6,
-                cursor: "pointer",
+                cursor: "grab",
                 fontSize: 14,
                 fontWeight: 500,
               }}
@@ -653,13 +1117,14 @@ export default function StableConfigurator() {
             </div>
             <button
               onClick={() => attach("shelter_12x12", "E")}
+              onMouseDown={() => handleButtonMouseDown("shelter_12x12")}
               style={{
                 padding: "10px 16px",
                 backgroundColor: "#0066cc",
                 color: "white",
                 border: "none",
                 borderRadius: 6,
-                cursor: "pointer",
+                cursor: "grab",
                 fontSize: 14,
                 fontWeight: 500,
               }}
@@ -668,13 +1133,14 @@ export default function StableConfigurator() {
             </button>
             <button
               onClick={() => attach("corner_16x12", "E")}
+              onMouseDown={() => handleButtonMouseDown("corner_16x12")}
               style={{
                 padding: "10px 16px",
                 backgroundColor: "#0066cc",
                 color: "white",
                 border: "none",
                 borderRadius: 6,
-                cursor: "pointer",
+                cursor: "grab",
                 fontSize: 14,
                 fontWeight: 500,
               }}
@@ -683,13 +1149,14 @@ export default function StableConfigurator() {
             </button>
             <button
               onClick={() => attach("tack_room_12x12", "E")}
+              onMouseDown={() => handleButtonMouseDown("tack_room_12x12")}
               style={{
                 padding: "10px 16px",
                 backgroundColor: "#0066cc",
                 color: "white",
                 border: "none",
                 borderRadius: 6,
-                cursor: "pointer",
+                cursor: "grab",
                 fontSize: 14,
                 fontWeight: 500,
               }}
@@ -789,10 +1256,14 @@ export default function StableConfigurator() {
           Plan View
         </div>
         <svg
+          ref={svgRef}
           width="100%"
           height="600"
-          viewBox={`${(ext.minX - 3) * FT_TO_PX} ${(ext.minY - 3) * FT_TO_PX} ${(ext.maxX - ext.minX + 6) * FT_TO_PX} ${(ext.maxY - ext.minY + 6) * FT_TO_PX}`}
-          style={{ border: "2px solid #ccc", borderRadius: 8, backgroundColor: "#fafafa" }}
+          viewBox={`${(ext.minX - 15) * FT_TO_PX} ${(ext.minY - 15) * FT_TO_PX} ${(ext.maxX - ext.minX + 30) * FT_TO_PX} ${(ext.maxY - ext.minY + 30) * FT_TO_PX}`}
+          style={{ border: "2px solid #ccc", borderRadius: 8, backgroundColor: "#fafafa", cursor: draggingModuleId || draggingUnitUid ? "grabbing" : "default" }}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseLeave}
         >
           {/* Grid */}
           <defs>
@@ -812,6 +1283,33 @@ export default function StableConfigurator() {
           </defs>
           <rect width="100%" height="100%" fill="url(#grid)" />
 
+          {/* Drag preview */}
+          {renderDragPreview()}
+
+          {/* Highlight snapped connector */}
+          {snappedConnector && (() => {
+            const targetUnit = units.find((u) => u.uid === snappedConnector.uid);
+            if (!targetUnit) return null;
+            const targetMod = getModule(targetUnit.moduleId);
+            const targetConn = targetMod.connectors.find((c) => c.id === snappedConnector.connId);
+            if (!targetConn) return null;
+            const connWorld = connectorWorld(targetUnit, targetMod, targetConn);
+            const connX = connWorld.x * FT_TO_PX;
+            const connY = connWorld.y * FT_TO_PX;
+            
+            return (
+              <circle
+                cx={connX}
+                cy={connY}
+                r={8}
+                fill="#4CBB17"
+                stroke="white"
+                strokeWidth={2}
+                opacity={0.8}
+              />
+            );
+          })()}
+
           {units.map((u) => {
             const m = getModule(u.moduleId);
             const { w, d } = rotatedSize(m.widthFt, m.depthFt, u.rot);
@@ -822,7 +1320,8 @@ export default function StableConfigurator() {
                 key={u.uid}
                 transform={`translate(${u.xFt * FT_TO_PX}, ${u.yFt * FT_TO_PX})`}
                 onClick={() => setSelectedUid(u.uid)}
-                style={{ cursor: "pointer" }}
+                onMouseDown={(e) => handleUnitMouseDown(e, u)}
+                style={{ cursor: draggingUnitUid === u.uid ? "grabbing" : "grab" }}
               >
                 {/* Main rectangle */}
                 <rect
