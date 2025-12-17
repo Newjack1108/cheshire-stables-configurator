@@ -190,92 +190,7 @@ function renderDoor(
     );
   }
 
-  // Draw door leaves with swing arcs (convex outward, bulging away from stable)
-  // The arc shows the path of the free edge of the door as it swings open outward
-  let doorPos = openingStart * FT_TO_PX;
-  for (const door of feature.doors) {
-    const doorWidthPx = door.widthFt * FT_TO_PX;
-    const isLeftHinge = door.hinge === "left";
-    const arcRadius = doorWidthPx * 0.9; // Arc radius matches door width
-    
-    if (frontFace === "S") {
-      // Bottom edge - door swings outward (down/away from building)
-      const hingeX = isLeftHinge ? doorPos : doorPos + doorWidthPx;
-      const hingeY = d * FT_TO_PX;
-      // Free edge (opposite of hinge) traces an arc bulging outward (downward)
-      const freeEdgeX = isLeftHinge ? doorPos + doorWidthPx : doorPos;
-      const freeEdgeY = hingeY; // Start at same Y as hinge
-      // When door swings open, free edge moves outward (downward)
-      const endY = hingeY + arcRadius; // Arc bulges outward (downward)
-      
-      elements.push(
-        <path
-          key={`door-${doorPos}`}
-          d={`M ${freeEdgeX} ${freeEdgeY} A ${arcRadius} ${arcRadius} 0 0 1 ${isLeftHinge ? freeEdgeX - arcRadius : freeEdgeX + arcRadius} ${endY}`}
-          fill="none"
-          stroke={isSelected ? "#0066cc" : "#333"}
-          strokeWidth={STROKE}
-          strokeDasharray="4,3"
-        />
-      );
-    } else if (frontFace === "N") {
-      // Top edge - door swings outward (up/away from building)
-      const hingeX = isLeftHinge ? doorPos : doorPos + doorWidthPx;
-      const hingeY = 0;
-      const freeEdgeX = isLeftHinge ? doorPos + doorWidthPx : doorPos;
-      const freeEdgeY = hingeY;
-      const endY = hingeY - arcRadius; // Arc bulges outward (upward)
-      
-      elements.push(
-        <path
-          key={`door-${doorPos}`}
-          d={`M ${freeEdgeX} ${freeEdgeY} A ${arcRadius} ${arcRadius} 0 0 1 ${isLeftHinge ? freeEdgeX + arcRadius : freeEdgeX - arcRadius} ${endY}`}
-          fill="none"
-          stroke={isSelected ? "#0066cc" : "#333"}
-          strokeWidth={STROKE}
-          strokeDasharray="4,3"
-        />
-      );
-    } else if (frontFace === "E") {
-      // Right edge - door swings outward (right/away from building)
-      const hingeX = w * FT_TO_PX;
-      const hingeY = isLeftHinge ? doorPos : doorPos + doorWidthPx;
-      const freeEdgeX = hingeX;
-      const freeEdgeY = isLeftHinge ? doorPos + doorWidthPx : doorPos;
-      const endX = hingeX + arcRadius; // Arc bulges outward (rightward)
-      
-      elements.push(
-        <path
-          key={`door-${doorPos}`}
-          d={`M ${freeEdgeX} ${freeEdgeY} A ${arcRadius} ${arcRadius} 0 0 1 ${endX} ${isLeftHinge ? freeEdgeY - arcRadius : freeEdgeY + arcRadius}`}
-          fill="none"
-          stroke={isSelected ? "#0066cc" : "#333"}
-          strokeWidth={STROKE}
-          strokeDasharray="4,3"
-        />
-      );
-    } else if (frontFace === "W") {
-      // Left edge - door swings outward (left/away from building)
-      const hingeX = 0;
-      const hingeY = isLeftHinge ? doorPos : doorPos + doorWidthPx;
-      const freeEdgeX = hingeX;
-      const freeEdgeY = isLeftHinge ? doorPos + doorWidthPx : doorPos;
-      const endX = hingeX - arcRadius; // Arc bulges outward (leftward)
-      
-      elements.push(
-        <path
-          key={`door-${doorPos}`}
-          d={`M ${freeEdgeX} ${freeEdgeY} A ${arcRadius} ${arcRadius} 0 0 1 ${endX} ${isLeftHinge ? freeEdgeY + arcRadius : freeEdgeY - arcRadius}`}
-          fill="none"
-          stroke={isSelected ? "#0066cc" : "#333"}
-          strokeWidth={STROKE}
-          strokeDasharray="4,3"
-        />
-      );
-    }
-    
-    doorPos += doorWidthPx;
-  }
+  // Door arcs removed - just show the opening indicators
 
   return <g>{elements}</g>;
 }
@@ -461,25 +376,22 @@ export default function StableConfigurator() {
     };
 
     const bNew = bbox(newUnit, newMod);
+    
+    // Check for overlaps - be lenient since boxes attached via connectors should be positioned correctly
     for (const u of units) {
       const bExisting = bbox(u, getModule(u.moduleId));
       
-      // Check for actual overlap (not just touching)
-      const hasOverlap = 
-        bNew.x < bExisting.x + bExisting.w &&
-        bNew.x + bNew.w > bExisting.x &&
-        bNew.y < bExisting.y + bExisting.d &&
-        bNew.y + bNew.d > bExisting.y;
+      // Use a more lenient tolerance for boxes attached via connectors
+      // Allow boxes that are touching or very close (within 0.5ft)
+      const tolerance = 0.5;
       
-      // Allow boxes that are just touching at edges
-      const justTouching = 
-        Math.abs(bNew.x + bNew.w - bExisting.x) < 0.01 ||
-        Math.abs(bExisting.x + bExisting.w - bNew.x) < 0.01 ||
-        Math.abs(bNew.y + bNew.d - bExisting.y) < 0.01 ||
-        Math.abs(bExisting.y + bExisting.d - bNew.y) < 0.01;
+      // Check if boxes actually overlap (not just touching)
+      // Only flag if there's significant interior overlap
+      const overlapX = Math.min(bNew.x + bNew.w, bExisting.x + bExisting.w) - Math.max(bNew.x, bExisting.x);
+      const overlapY = Math.min(bNew.y + bNew.d, bExisting.y + bExisting.d) - Math.max(bNew.y, bExisting.y);
       
-      if (hasOverlap && !justTouching) {
-        console.log("Overlap detected:", { new: bNew, existing: bExisting });
+      // Only flag as overlap if there's meaningful interior overlap (more than tolerance)
+      if (overlapX > tolerance && overlapY > tolerance) {
         return alert("Overlap");
       }
     }
@@ -1011,6 +923,58 @@ export default function StableConfigurator() {
                 >
                   {m.widthFt}×{m.depthFt}ft
                 </text>
+
+                {/* Render connectors - show all for selected box, or unused ones for others */}
+                {m.connectors.map((conn) => {
+                  const isUsedConn = isUsed(u.uid, conn.id);
+                  // Show all connectors for selected box, or unused connectors for others
+                  if (!isSelected && isUsedConn) return null;
+                  
+                  const connWorld = connectorWorld(u, m, conn);
+                  const connX = (connWorld.x - u.xFt) * FT_TO_PX;
+                  const connY = (connWorld.y - u.yFt) * FT_TO_PX;
+                  
+                  return (
+                    <g key={conn.id}>
+                      {/* Connector point */}
+                      <circle
+                        cx={connX}
+                        cy={connY}
+                        r={isSelected ? 6 : 4}
+                        fill={isUsedConn ? "#999" : isSelected ? "#0066cc" : "#666"}
+                        stroke="white"
+                        strokeWidth={1}
+                        style={{ cursor: isSelected && !isUsedConn ? "pointer" : "default" }}
+                      />
+                      {/* Connector direction indicator */}
+                      {isSelected && !isUsedConn && (
+                        <line
+                          x1={connX}
+                          y1={connY}
+                          x2={connX + connWorld.nx * 8}
+                          y2={connY + connWorld.ny * 8}
+                          stroke="#0066cc"
+                          strokeWidth={2}
+                          strokeLinecap="round"
+                        />
+                      )}
+                      {/* Connector label */}
+                      {isSelected && (
+                        <text
+                          x={connX + connWorld.nx * 12}
+                          y={connY + connWorld.ny * 12}
+                          fontSize={10}
+                          fill="#0066cc"
+                          fontWeight={600}
+                          textAnchor="middle"
+                          dominantBaseline="middle"
+                        >
+                          {conn.id}
+                        </text>
+                      )}
+                    </g>
+                  );
+                })}
               </g>
             );
           })}
