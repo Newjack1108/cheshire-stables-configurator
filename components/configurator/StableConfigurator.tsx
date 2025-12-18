@@ -861,8 +861,26 @@ export default function StableConfigurator() {
           );
           
           // Calculate position to align connector points
-          const x = aW.x - p.x;
-          const y = aW.y - p.y;
+          let x = aW.x - p.x;
+          let y = aW.y - p.y;
+          
+          // For front-to-side connections, ensure corner sits alongside standard (not overlapping)
+          // E→A: corner should be to the left of standard (corner's right edge touches standard's left edge)
+          // C→B: corner should be to the right of standard (corner's left edge touches standard's right edge)
+          if ((c.id === "E" && targetConnCandidate.id === "A") || 
+              (c.id === "A" && targetConnCandidate.id === "E")) {
+            // E→A: Position corner to the left of standard
+            const { w } = rotatedSize(newMod.widthFt, newMod.depthFt, rot);
+            // A connector is at x=0 on standard, so standard's left edge is at sourceUnit.xFt
+            const standardLeftEdge = sourceUnit.xFt;
+            x = standardLeftEdge - w; // Corner's right edge at standard's left edge
+          } else if ((c.id === "C" && targetConnCandidate.id === "B") ||
+                     (c.id === "B" && targetConnCandidate.id === "C")) {
+            // C→B: Position corner to the right of standard
+            // B connector is at x=w on standard, so standard's right edge is at sourceUnit.xFt + aMod.widthFt
+            const standardRightEdge = sourceUnit.xFt + aMod.widthFt;
+            x = standardRightEdge; // Corner's left edge at standard's right edge
+          }
           
           // Calculate distance between connector points after positioning
           // This should be close to 0 when connectors are properly aligned
@@ -1006,8 +1024,22 @@ export default function StableConfigurator() {
         const p = rotatePoint(c.x, c.y, unitMod.widthFt, unitMod.depthFt, rot);
         
         // Calculate position to align connector points
-        const x = aW.x - p.x;
-        const y = aW.y - p.y;
+        let x = aW.x - p.x;
+        let y = aW.y - p.y;
+        
+        // For front-to-side connections, ensure corner sits alongside standard (not overlapping)
+        if ((c.id === "E" && targetConn === "A") || 
+            (c.id === "A" && targetConn === "E")) {
+          // E→A: Position corner to the left of standard
+          const { w } = rotatedSize(unitMod.widthFt, unitMod.depthFt, rot);
+          const standardLeftEdge = targetUnit.xFt;
+          x = standardLeftEdge - w; // Corner's right edge at standard's left edge
+        } else if ((c.id === "C" && targetConn === "B") ||
+                   (c.id === "B" && targetConn === "C")) {
+          // C→B: Position corner to the right of standard
+          const standardRightEdge = targetUnit.xFt + targetMod.widthFt;
+          x = standardRightEdge; // Corner's left edge at standard's right edge
+        }
         
         // Calculate distance between connector points after positioning
         const connDist = Math.sqrt((x + p.x - aW.x) ** 2 + (y + p.y - aW.y) ** 2);
@@ -1543,8 +1575,22 @@ export default function StableConfigurator() {
               const p = rotatePoint(c.x, c.y, m.widthFt, m.depthFt, rot);
               
               // Calculate position to align connector points
-              const x = aW.x - p.x;
-              const y = aW.y - p.y;
+              let x = aW.x - p.x;
+              let y = aW.y - p.y;
+              
+              // For front-to-side connections, ensure corner sits alongside standard (not overlapping)
+              if ((c.id === "E" && targetConnCandidate.id === "A") || 
+                  (c.id === "A" && targetConnCandidate.id === "E")) {
+                // E→A: Position corner to the left of standard
+                const { w } = rotatedSize(m.widthFt, m.depthFt, rot);
+                const standardLeftEdge = targetUnit.xFt;
+                x = standardLeftEdge - w; // Corner's right edge at standard's left edge
+              } else if ((c.id === "C" && targetConnCandidate.id === "B") ||
+                         (c.id === "B" && targetConnCandidate.id === "C")) {
+                // C→B: Position corner to the right of standard
+                const standardRightEdge = targetUnit.xFt + targetMod.widthFt;
+                x = standardRightEdge; // Corner's left edge at standard's right edge
+              }
               
               // Calculate distance between connector points after positioning
               const connDist = Math.sqrt((x + p.x - aW.x) ** 2 + (y + p.y - aW.y) ** 2);
