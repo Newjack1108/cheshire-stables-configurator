@@ -813,54 +813,6 @@ export default function StableConfigurator() {
     return true;
   }
 
-  // Calculate wall offset to position modules alongside each other based on connector normals
-// After aligning connector points, this offsets the module so walls touch instead of overlapping
-// Returns offset in x and y directions
-function calculateWallOffset(
-  sourceNormal: { nx: number; ny: number },
-  targetNormal: { nx: number; ny: number },
-  sourceSize: { w: number; d: number },
-  rot: Rotation
-): { offsetX: number; offsetY: number } {
-  const { w, d } = rotatedSize(sourceSize.w, sourceSize.d, rot);
-  
-  // Check if normals are opposite (side-to-side connection)
-  const dot = sourceNormal.nx * targetNormal.nx + sourceNormal.ny * targetNormal.ny;
-  const isOpposite = dot < -0.7;
-  
-  if (isOpposite) {
-    // Side-to-side: offset in direction of SOURCE normal by source module's dimension
-    // This moves the source module away from the target so walls touch instead of overlapping
-    // When connector points are aligned, the source module overlaps; we need to move it away
-    if (Math.abs(sourceNormal.nx) > Math.abs(sourceNormal.ny)) {
-      // Horizontal connection: offset by width in direction of source normal
-      return { offsetX: sourceNormal.nx * w, offsetY: 0 };
-    } else {
-      // Vertical connection: offset by depth in direction of source normal
-      return { offsetX: 0, offsetY: sourceNormal.ny * d };
-    }
-  } else {
-    // Front-to-side: offset perpendicular to source normal (front connector)
-    // For E→A or C→B: source normal is vertical (0, 1), offset horizontally
-    // Determine offset direction based on which side the front connector is on
-    if (Math.abs(sourceNormal.nx) > Math.abs(sourceNormal.ny)) {
-      // Source connector is horizontal (side), offset vertically
-      // This shouldn't happen for front-to-side, but handle it
-      return { offsetX: 0, offsetY: sourceNormal.ny * d };
-    } else {
-      // Source connector is vertical (front), offset horizontally
-      // For E→A: E is front (0, 1), A is left (-1, 0), offset in direction of A's normal (left)
-      // For C→B: C is front (0, 1), B is right (1, 0), offset in direction of B's normal (right)
-      // Use target normal to determine direction
-      if (Math.abs(targetNormal.nx) > Math.abs(targetNormal.ny)) {
-        return { offsetX: targetNormal.nx * w, offsetY: 0 };
-      } else {
-        return { offsetX: targetNormal.nx * w, offsetY: 0 };
-      }
-    }
-  }
-}
-
 function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUnit) {
     const sourceUnit = targetUnit || selected;
     if (!sourceUnit) return;
@@ -930,26 +882,15 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
             }
           }
           
-          // Calculate wall offset to position modules alongside each other
-          // For side-to-side: connectors are on edges, so aligning them causes overlap
-          // We need to offset the source module away from target by its dimension
-          // For front-to-side: apply calculated offset
-          if (isSideToSide) {
-            // Side-to-side: offset source module away from target by its dimension
-            // Move in direction of source normal (away from target)
-            const { w, d } = rotatedSize(newMod.widthFt, newMod.depthFt, rot);
-            if (Math.abs(v.nx) > Math.abs(v.ny)) {
-              // Horizontal: offset by width
-              x += v.nx * w;
-            } else {
-              // Vertical: offset by depth
-              y += v.ny * d;
-            }
+          // Offset to prevent overlap: move source module away by its dimension in direction of source normal
+          // This works for both side-to-side and front-to-side connections
+          const { w, d } = rotatedSize(newMod.widthFt, newMod.depthFt, rot);
+          if (Math.abs(v.nx) > Math.abs(v.ny)) {
+            // Horizontal connector: offset by width
+            x += v.nx * w;
           } else {
-            // Front-to-side: use calculated offset
-            const wallOffset = calculateWallOffset(v, aW, { w: newMod.widthFt, d: newMod.depthFt }, rot);
-            x += wallOffset.offsetX;
-            y += wallOffset.offsetY;
+            // Vertical connector: offset by depth
+            y += v.ny * d;
           }
           
           // Calculate distance between connector points after positioning
@@ -1115,26 +1056,15 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
           }
         }
         
-        // Calculate wall offset to position modules alongside each other
-        // For side-to-side: connectors are on edges, so aligning them causes overlap
-        // We need to offset the source module away from target by its dimension
-        // For front-to-side: apply calculated offset
-        if (isSideToSide) {
-          // Side-to-side: offset source module away from target by its dimension
-          // Move in direction of source normal (away from target)
-          const { w, d } = rotatedSize(unitMod.widthFt, unitMod.depthFt, rot);
-          if (Math.abs(v.nx) > Math.abs(v.ny)) {
-            // Horizontal: offset by width
-            x += v.nx * w;
-          } else {
-            // Vertical: offset by depth
-            y += v.ny * d;
-          }
+        // Offset to prevent overlap: move source module away by its dimension in direction of source normal
+        // This works for both side-to-side and front-to-side connections
+        const { w, d } = rotatedSize(unitMod.widthFt, unitMod.depthFt, rot);
+        if (Math.abs(v.nx) > Math.abs(v.ny)) {
+          // Horizontal connector: offset by width
+          x += v.nx * w;
         } else {
-          // Front-to-side: use calculated offset
-          const wallOffset = calculateWallOffset(v, aW, { w: unitMod.widthFt, d: unitMod.depthFt }, rot);
-          x += wallOffset.offsetX;
-          y += wallOffset.offsetY;
+          // Vertical connector: offset by depth
+          y += v.ny * d;
         }
         
         // Calculate distance between connector points after positioning
@@ -1692,26 +1622,15 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
                 }
               }
               
-              // Calculate wall offset to position modules alongside each other
-              // For side-to-side: connectors are on edges, so aligning them causes overlap
-              // We need to offset the source module away from target by its dimension
-              // For front-to-side: apply calculated offset
-              if (isSideToSide) {
-                // Side-to-side: offset source module away from target by its dimension
-                // Move in direction of source normal (away from target)
-                const { w, d } = rotatedSize(m.widthFt, m.depthFt, rot);
-                if (Math.abs(v.nx) > Math.abs(v.ny)) {
-                  // Horizontal: offset by width
-                  x += v.nx * w;
-                } else {
-                  // Vertical: offset by depth
-                  y += v.ny * d;
-                }
+              // Offset to prevent overlap: move source module away by its dimension in direction of source normal
+              // This works for both side-to-side and front-to-side connections
+              const { w, d } = rotatedSize(m.widthFt, m.depthFt, rot);
+              if (Math.abs(v.nx) > Math.abs(v.ny)) {
+                // Horizontal connector: offset by width
+                x += v.nx * w;
               } else {
-                // Front-to-side: use calculated offset
-                const wallOffset = calculateWallOffset(v, aW, { w: m.widthFt, d: m.depthFt }, rot);
-                x += wallOffset.offsetX;
-                y += wallOffset.offsetY;
+                // Vertical connector: offset by depth
+                y += v.ny * d;
               }
               
               // Calculate distance between connector points after positioning
