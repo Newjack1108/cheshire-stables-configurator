@@ -477,8 +477,10 @@ export default function StableConfigurator() {
   
   // Simple drag state
   const [draggingModuleId, setDraggingModuleId] = useState<string | null>(null);
+  const [draggingUnitUid, setDraggingUnitUid] = useState<string | null>(null);
   const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
   const [snappedConnector, setSnappedConnector] = useState<{ uid: string; connId: ConnectorId } | null>(null);
+  const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null);
 
   const selected = units.find((u) => u.uid === selectedUid);
 
@@ -526,19 +528,13 @@ export default function StableConfigurator() {
     x: number,
     y: number,
     rot: Rotation
-  ): { uid: string; connId: ConnectorId; distance: number } | null {
+  ): { uid: string; connId: ConnectorId; distance: number; finalX: number; finalY: number } | null {
     const draggedMod = getModule(moduleId);
-    let nearest: { uid: string; connId: ConnectorId; distance: number } | null = null;
-    const snapDistFt = 3; // 3ft snap distance
+    let nearest: { uid: string; connId: ConnectorId; distance: number; finalX: number; finalY: number } | null = null;
+    const snapDistFt = 5; // 5ft snap distance (increased for better snapping)
     
-    // Get dragged module's connector positions
+    // Try each connector of the dragged module
     for (const draggedConn of draggedMod.connectors) {
-      const draggedConnWorld = connectorWorld(
-        { uid: "temp", moduleId, xFt: x, yFt: y, rot, selectedExtras: [] },
-        draggedMod,
-        draggedConn
-      );
-      
       // Check against all units
       for (const u of units) {
         const m = getModule(u.moduleId);
@@ -547,12 +543,29 @@ export default function StableConfigurator() {
           if (!canConnect(draggedConn.id, conn.id)) continue;
           
           const connWorld = connectorWorld(u, m, conn);
-          const dx = draggedConnWorld.x - connWorld.x;
-          const dy = draggedConnWorld.y - connWorld.y;
+          
+          // Calculate where the dragged module would be positioned to connect
+          const p = rotatePoint(draggedConn.x, draggedConn.y, draggedMod.widthFt, draggedMod.depthFt, rot);
+          const v = rotateVec(draggedConn.nx, draggedConn.ny, rot);
+          
+          let finalX = connWorld.x - p.x;
+          let finalY = connWorld.y - p.y;
+          
+          // Offset to prevent overlap
+          const { w, d } = rotatedSize(draggedMod.widthFt, draggedMod.depthFt, rot);
+          if (Math.abs(v.nx) > Math.abs(v.ny)) {
+            finalX += v.nx * w;
+          } else {
+            finalY += v.ny * d;
+          }
+          
+          // Calculate distance from current mouse position to final position
+          const dx = x - finalX;
+          const dy = y - finalY;
           const dist = Math.sqrt(dx * dx + dy * dy);
           
           if (dist < snapDistFt && (!nearest || dist < nearest.distance)) {
-            nearest = { uid: u.uid, connId: conn.id, distance: dist };
+            nearest = { uid: u.uid, connId: conn.id, distance: dist, finalX, finalY };
           }
         }
       }
@@ -763,74 +776,169 @@ export default function StableConfigurator() {
     }
   }
 
-  // Simple drag handlers - only for dragging new modules from buttons
+  // Simple drag handlers
   function handleButtonMouseDown(moduleId: string) {
     setDraggingModuleId(moduleId);
   }
 
+  function handleUnitMouseDown(e: React.MouseEvent<SVGGElement>, unit: PlacedUnit) {
+    e.stopPropagation();
+    const svg = e.currentTarget.ownerSVGElement!;
+    const worldPos = screenToWorld(svg, e.clientX, e.clientY);
+    setDraggingUnitUid(unit.uid);
+    setDragOffset({ x: worldPos.x - unit.xFt, y: worldPos.y - unit.yFt });
+    setDragPosition(worldPos);
+    setSelectedUid(unit.uid);
+  }
+
   function handleMouseMove(e: React.MouseEvent<SVGSVGElement>) {
-    if (!draggingModuleId) return;
-    
     const svg = e.currentTarget;
     const worldPos = screenToWorld(svg, e.clientX, e.clientY);
     setDragPosition(worldPos);
 
-    // Find nearest connector for snapping
-    const m = getModule(draggingModuleId);
-    const centeredX = worldPos.x - m.widthFt / 2;
-    const centeredY = worldPos.y - m.depthFt / 2;
-    
-    let bestNearest: { uid: string; connId: ConnectorId; distance: number } | null = null;
-    for (const rot of m.rotations) {
-      const nearest = findNearestConnector(draggingModuleId, centeredX, centeredY, rot);
-      if (nearest && (!bestNearest || nearest.distance < bestNearest.distance)) {
-        bestNearest = nearest;
+    if (draggingModuleId) {
+      // Dragging new module from button
+      const m = getModule(draggingModuleId);
+      const centeredX = worldPos.x - m.widthFt / 2;
+      const centeredY = worldPos.y - m.depthFt / 2;
+      
+      let bestNearest: { uid: string; connId: ConnectorId; distance: number; finalX: number; finalY: number } | null = null;
+      for (const rot of m.rotations) {
+        const nearest = findNearestConnector(draggingModuleId, centeredX, centeredY, rot);
+        if (nearest && (!bestNearest || nearest.distance < bestNearest.distance)) {
+          bestNearest = nearest;
+        }
+      }
+      
+      setSnappedConnector(bestNearest ? { uid: bestNearest.uid, connId: bestNearest.connId } : null);
+    } else if (draggingUnitUid && dragOffset) {
+      // Dragging existing unit
+      const unit = units.find((u) => u.uid === draggingUnitUid);
+      if (unit) {
+        const newX = worldPos.x - dragOffset.x;
+        const newY = worldPos.y - dragOffset.y;
+        const nearest = findNearestConnector(unit.moduleId, newX, newY, unit.rot);
+        setSnappedConnector(nearest ? { uid: nearest.uid, connId: nearest.connId } : null);
       }
     }
-    
-    setSnappedConnector(bestNearest ? { uid: bestNearest.uid, connId: bestNearest.connId } : null);
   }
 
   function handleMouseUp(e: React.MouseEvent<SVGSVGElement>) {
-    if (!draggingModuleId) return;
-    
     const svg = e.currentTarget;
     const worldPos = screenToWorld(svg, e.clientX, e.clientY);
     
-    // Check for nearest connector at release position
-    const m = getModule(draggingModuleId);
-    const centeredX = worldPos.x - m.widthFt / 2;
-    const centeredY = worldPos.y - m.depthFt / 2;
-    
-    let bestNearest: { uid: string; connId: ConnectorId; distance: number } | null = null;
-    for (const rot of m.rotations) {
-      const nearest = findNearestConnector(draggingModuleId, centeredX, centeredY, rot);
-      if (nearest && (!bestNearest || nearest.distance < bestNearest.distance)) {
-        bestNearest = nearest;
+    if (draggingModuleId) {
+      // Check for nearest connector at release position
+      const m = getModule(draggingModuleId);
+      const centeredX = worldPos.x - m.widthFt / 2;
+      const centeredY = worldPos.y - m.depthFt / 2;
+      
+      let bestNearest: { uid: string; connId: ConnectorId; distance: number; finalX: number; finalY: number } | null = null;
+      for (const rot of m.rotations) {
+        const nearest = findNearestConnector(draggingModuleId, centeredX, centeredY, rot);
+        if (nearest && (!bestNearest || nearest.distance < bestNearest.distance)) {
+          bestNearest = nearest;
+        }
       }
-    }
-    
-    if (bestNearest) {
-      // Attach to connector
-      const targetUnit = units.find((u) => u.uid === bestNearest!.uid);
-      if (targetUnit) {
-        attach(draggingModuleId, bestNearest.connId, targetUnit);
+      
+      if (bestNearest) {
+        // Attach to connector
+        const targetUnit = units.find((u) => u.uid === bestNearest!.uid);
+        if (targetUnit) {
+          attach(draggingModuleId, bestNearest.connId, targetUnit);
+        }
+      } else {
+        // Place in free space
+        placeModuleFree(draggingModuleId, worldPos.x, worldPos.y);
       }
-    } else {
-      // Place in free space
-      placeModuleFree(draggingModuleId, worldPos.x, worldPos.y);
+      
+      setDraggingModuleId(null);
+      setDragPosition(null);
+      setSnappedConnector(null);
+    } else if (draggingUnitUid && dragOffset) {
+      // Reposition existing unit
+      const unit = units.find((u) => u.uid === draggingUnitUid);
+      if (unit) {
+        let finalX = worldPos.x - dragOffset.x;
+        let finalY = worldPos.y - dragOffset.y;
+        
+        // Check if snapped to connector - use snapped position
+        if (snappedConnector) {
+          const nearest = findNearestConnector(unit.moduleId, finalX, finalY, unit.rot);
+          if (nearest) {
+            finalX = nearest.finalX;
+            finalY = nearest.finalY;
+            
+            // Try to connect to the snapped connector
+            const targetUnit = units.find((u) => u.uid === snappedConnector.uid);
+            if (targetUnit) {
+              const targetMod = getModule(targetUnit.moduleId);
+              const targetConnDef = targetMod.connectors.find(c => c.id === snappedConnector.connId);
+              if (targetConnDef && !isUsed(targetUnit.uid, snappedConnector.connId)) {
+                // Find matching connector on unit
+                const unitMod = getModule(unit.moduleId);
+                for (const conn of unitMod.connectors) {
+                  if (canConnect(conn.id, snappedConnector.connId)) {
+                    // Remove old connections
+                    const filteredConnections = connections.filter(
+                      (c) => c.aUid !== draggingUnitUid && c.bUid !== draggingUnitUid
+                    );
+                    // Add new connection
+                    const updatedUnit: PlacedUnit = { ...unit, xFt: finalX, yFt: finalY };
+                    setUnits(units.map((u) => (u.uid === draggingUnitUid ? updatedUnit : u)));
+                    setConnections([
+                      ...filteredConnections,
+                      { aUid: targetUnit.uid, aConn: snappedConnector.connId, bUid: draggingUnitUid, bConn: conn.id }
+                    ]);
+                    setDraggingUnitUid(null);
+                    setDragOffset(null);
+                    setDragPosition(null);
+                    setSnappedConnector(null);
+                    return;
+                  }
+                }
+              }
+            }
+          }
+        }
+        
+        // Place in free space (or snapped position if no connection made)
+        const testUnit: PlacedUnit = { uid: "test", moduleId: unit.moduleId, xFt: finalX, yFt: finalY, rot: unit.rot, selectedExtras: [] };
+        const bNew = bbox(testUnit, getModule(unit.moduleId));
+        let overlaps = false;
+        for (const u of units) {
+          if (u.uid === draggingUnitUid) continue;
+          if (hasOverlap(bNew, bbox(u, getModule(u.moduleId)))) {
+            overlaps = true;
+            break;
+          }
+        }
+        
+        if (!overlaps) {
+          const updatedUnit: PlacedUnit = { ...unit, xFt: finalX, yFt: finalY };
+          // Remove connections when moving to free space
+          const filteredConnections = connections.filter(
+            (c) => c.aUid !== draggingUnitUid && c.bUid !== draggingUnitUid
+          );
+          setUnits(units.map((u) => (u.uid === draggingUnitUid ? updatedUnit : u)));
+          setConnections(filteredConnections);
+        }
+      }
+      
+      setDraggingUnitUid(null);
+      setDragOffset(null);
+      setDragPosition(null);
+      setSnappedConnector(null);
     }
-    
-    setDraggingModuleId(null);
-    setDragPosition(null);
-    setSnappedConnector(null);
   }
 
   function handleMouseLeave() {
     // Cancel drag if mouse leaves SVG
     setDraggingModuleId(null);
+    setDraggingUnitUid(null);
     setDragPosition(null);
     setSnappedConnector(null);
+    setDragOffset(null);
   }
 
   const totalCost = useMemo(() => {
@@ -895,49 +1003,67 @@ export default function StableConfigurator() {
 
   // Simple drag preview
   function renderDragPreview() {
-    if (!draggingModuleId || !dragPosition) return null;
+    if ((!draggingModuleId && !draggingUnitUid) || !dragPosition) return null;
 
-    const m = getModule(draggingModuleId);
-    let previewX = dragPosition.x - m.widthFt / 2;
-    let previewY = dragPosition.y - m.depthFt / 2;
-    let previewRot: Rotation = 0;
+    let m: ModuleDef;
+    let previewX: number;
+    let previewY: number;
+    let previewRot: Rotation;
 
-    // If snapped to connector, calculate position
-    if (snappedConnector) {
-      const targetUnit = units.find((u) => u.uid === snappedConnector.uid);
-      if (targetUnit) {
-        const targetMod = getModule(targetUnit.moduleId);
-        const targetConnDef = targetMod.connectors.find(c => c.id === snappedConnector.connId);
-        if (targetConnDef) {
-          const targetWorld = connectorWorld(targetUnit, targetMod, targetConnDef);
-          
-          // Try to find matching connector and rotation
+    if (draggingModuleId) {
+      // Dragging new module
+      m = getModule(draggingModuleId);
+      previewX = dragPosition.x - m.widthFt / 2;
+      previewY = dragPosition.y - m.depthFt / 2;
+      previewRot = 0;
+
+      // If snapped, use the snapped position
+      if (snappedConnector) {
+        const m = getModule(draggingModuleId);
+        const centeredX = dragPosition.x - m.widthFt / 2;
+        const centeredY = dragPosition.y - m.depthFt / 2;
+        
+        let bestNearest: { uid: string; connId: ConnectorId; distance: number; finalX: number; finalY: number } | null = null;
+        for (const rot of m.rotations) {
+          const nearest = findNearestConnector(draggingModuleId, centeredX, centeredY, rot);
+          if (nearest && (!bestNearest || nearest.distance < bestNearest.distance)) {
+            bestNearest = nearest;
+          }
+        }
+        
+        if (bestNearest) {
+          previewX = bestNearest.finalX;
+          previewY = bestNearest.finalY;
+          // Find which rotation was used
           for (const rot of m.rotations) {
-            for (const newConn of m.connectors) {
-              if (!canConnect(newConn.id, snappedConnector.connId)) continue;
-              
-              const p = rotatePoint(newConn.x, newConn.y, m.widthFt, m.depthFt, rot);
-              const v = rotateVec(newConn.nx, newConn.ny, rot);
-              
-              let x = targetWorld.x - p.x;
-              let y = targetWorld.y - p.y;
-              
-              const { w, d } = rotatedSize(m.widthFt, m.depthFt, rot);
-              if (Math.abs(v.nx) > Math.abs(v.ny)) {
-                x += v.nx * w;
-              } else {
-                y += v.ny * d;
-              }
-              
-              previewX = x;
-              previewY = y;
+            const testNearest = findNearestConnector(draggingModuleId, centeredX, centeredY, rot);
+            if (testNearest && testNearest.finalX === previewX && testNearest.finalY === previewY) {
               previewRot = rot;
               break;
             }
-            if (previewX !== dragPosition.x - m.widthFt / 2) break;
           }
         }
       }
+    } else if (draggingUnitUid && dragOffset) {
+      // Dragging existing unit
+      const unit = units.find((u) => u.uid === draggingUnitUid);
+      if (!unit) return null;
+      
+      m = getModule(unit.moduleId);
+      previewX = dragPosition.x - dragOffset.x;
+      previewY = dragPosition.y - dragOffset.y;
+      previewRot = unit.rot;
+      
+      // If snapped, use snapped position
+      if (snappedConnector) {
+        const nearest = findNearestConnector(unit.moduleId, previewX, previewY, unit.rot);
+        if (nearest) {
+          previewX = nearest.finalX;
+          previewY = nearest.finalY;
+        }
+      }
+    } else {
+      return null;
     }
 
     const { w, d } = rotatedSize(m.widthFt, m.depthFt, previewRot);
@@ -945,6 +1071,7 @@ export default function StableConfigurator() {
     let isValid = snappedConnector ? true : true;
     if (!snappedConnector) {
       for (const u of units) {
+        if (draggingUnitUid && u.uid === draggingUnitUid) continue;
         if (hasOverlap(bPreview, bbox(u, getModule(u.moduleId)))) {
           isValid = false;
           break;
@@ -953,7 +1080,7 @@ export default function StableConfigurator() {
     }
     const previewColor = isValid ? KELLY_GREEN : "#cc0000";
 
-    return (
+  return (
       <g
         transform={`translate(${previewX * FT_TO_PX}, ${previewY * FT_TO_PX})`}
         opacity={0.65}
@@ -1098,7 +1225,7 @@ export default function StableConfigurator() {
               }}
             >
               + Add Stable 6x12
-            </button>
+        </button>
             <button
               onClick={() => attach("stable_8x12", "E")}
               style={{
@@ -1498,7 +1625,7 @@ export default function StableConfigurator() {
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: 14, fontWeight: 500, color: "#1a1a1a", fontFamily: "Inter, sans-serif" }}>
                           {extra.name}
-                        </div>
+        </div>
                         {extra.description && (
                           <div style={{ fontSize: 12, color: "#666", marginTop: 4, fontFamily: "Inter, sans-serif" }}>
                             {extra.description}
@@ -1535,15 +1662,15 @@ export default function StableConfigurator() {
           </div>
           {/* Zoom Controls */}
         </div>
-        <svg
-          width="100%"
+      <svg
+        width="100%"
           height="600"
           viewBox={`${(ext.minX - 15) * FT_TO_PX} ${(ext.minY - 15) * FT_TO_PX} ${(ext.maxX - ext.minX + 30) * FT_TO_PX} ${(ext.maxY - ext.minY + 30) * FT_TO_PX}`}
           style={{ 
             border: "2px solid #d0d0d0", 
             borderRadius: 12, 
             backgroundColor: "#ffffff", 
-            cursor: draggingModuleId ? "grabbing" : "default",
+            cursor: (draggingModuleId || draggingUnitUid) ? "grabbing" : "default",
             boxShadow: "0 2px 8px rgba(0, 0, 0, 0.08)"
           }}
           onMouseMove={handleMouseMove}
@@ -1598,13 +1725,18 @@ export default function StableConfigurator() {
         {units.map((u) => {
           const m = getModule(u.moduleId);
           const { w, d } = rotatedSize(m.widthFt, m.depthFt, u.rot);
-            const isSelected = u.uid === selectedUid;
+          const isSelected = u.uid === selectedUid;
+          
+          // Hide unit being dragged (preview will show instead)
+          if (draggingUnitUid === u.uid) return null;
+          
           return (
             <g
               key={u.uid}
               transform={`translate(${u.xFt * FT_TO_PX}, ${u.yFt * FT_TO_PX})`}
               onClick={() => setSelectedUid(u.uid)}
-              style={{ cursor: "pointer" }}
+              onMouseDown={(e) => handleUnitMouseDown(e, u)}
+              style={{ cursor: draggingUnitUid === u.uid ? "grabbing" : "grab" }}
             >
                 {/* Main rectangle */}
               <rect
