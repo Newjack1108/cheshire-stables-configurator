@@ -829,14 +829,15 @@ function calculateWallOffset(
   const isOpposite = dot < -0.7;
   
   if (isOpposite) {
-    // Side-to-side: offset in direction of target normal by source module's dimension
-    // This moves the source module so its wall touches the target module's wall
-    if (Math.abs(targetNormal.nx) > Math.abs(targetNormal.ny)) {
-      // Horizontal connection: offset by width in direction of target normal
-      return { offsetX: targetNormal.nx * w, offsetY: 0 };
+    // Side-to-side: offset in direction of SOURCE normal by source module's dimension
+    // This moves the source module away from the target so walls touch instead of overlapping
+    // When connector points are aligned, the source module overlaps; we need to move it away
+    if (Math.abs(sourceNormal.nx) > Math.abs(sourceNormal.ny)) {
+      // Horizontal connection: offset by width in direction of source normal
+      return { offsetX: sourceNormal.nx * w, offsetY: 0 };
     } else {
-      // Vertical connection: offset by depth in direction of target normal
-      return { offsetX: 0, offsetY: targetNormal.ny * d };
+      // Vertical connection: offset by depth in direction of source normal
+      return { offsetX: 0, offsetY: sourceNormal.ny * d };
     }
   } else {
     // Front-to-side: offset perpendicular to source normal (front connector)
@@ -848,9 +849,8 @@ function calculateWallOffset(
       return { offsetX: 0, offsetY: sourceNormal.ny * d };
     } else {
       // Source connector is vertical (front), offset horizontally
-      // Offset in direction opposite to where the front connector would connect
-      // For E→A: E is front (0, 1), A is left (-1, 0), offset left by width
-      // For C→B: C is front (0, 1), B is right (1, 0), offset right by width
+      // For E→A: E is front (0, 1), A is left (-1, 0), offset in direction of A's normal (left)
+      // For C→B: C is front (0, 1), B is right (1, 0), offset in direction of B's normal (right)
       // Use target normal to determine direction
       if (Math.abs(targetNormal.nx) > Math.abs(targetNormal.ny)) {
         return { offsetX: targetNormal.nx * w, offsetY: 0 };
