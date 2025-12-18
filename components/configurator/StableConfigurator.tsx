@@ -859,10 +859,44 @@ export default function StableConfigurator() {
             newMod.depthFt,
             rot
           );
+          const v = rotateVec(c.nx, c.ny, rot);
           
           // Calculate position to align connector points
           let x = aW.x - p.x;
           let y = aW.y - p.y;
+          
+          // For side-to-side connections, ensure connector normals are opposite (pointing toward each other)
+          // F→B and A→D are side-to-side, so normals should be opposite
+          const isSideToSide = 
+            (c.id === "F" && targetConnCandidate.id === "B") ||
+            (c.id === "B" && targetConnCandidate.id === "F") ||
+            (c.id === "A" && targetConnCandidate.id === "D") ||
+            (c.id === "D" && targetConnCandidate.id === "A");
+          
+          if (isSideToSide) {
+            // Check if connector normals are opposite (pointing toward each other)
+            const dot = v.nx * aW.nx + v.ny * aW.ny;
+            if (dot >= -0.7) {
+              // Normals are not opposite enough, skip this rotation
+              continue;
+            }
+            
+            // For side-to-side, position alongside (not overlapping)
+            if ((c.id === "F" && targetConnCandidate.id === "B") ||
+                (c.id === "B" && targetConnCandidate.id === "F")) {
+              // F→B: Corner's left side (F) connects to standard's right side (B)
+              // Position corner so its left edge touches standard's right edge
+              const standardRightEdge = sourceUnit.xFt + aMod.widthFt;
+              x = standardRightEdge; // Corner's left edge at standard's right edge (walls touch)
+            } else if ((c.id === "A" && targetConnCandidate.id === "D") ||
+                       (c.id === "D" && targetConnCandidate.id === "A")) {
+              // A→D: Standard's left side (A) connects to corner's right side (D)
+              // Position corner so its right edge touches standard's left edge
+              const { w } = rotatedSize(newMod.widthFt, newMod.depthFt, rot);
+              const standardLeftEdge = sourceUnit.xFt;
+              x = standardLeftEdge - w; // Corner's right edge at standard's left edge (walls touch)
+            }
+          }
           
           // For front-to-side connections, ensure corner sits alongside standard (not overlapping)
           // E→A: corner should be to the left of standard (corner's right edge touches standard's left edge)
@@ -1022,10 +1056,42 @@ export default function StableConfigurator() {
         }
         
         const p = rotatePoint(c.x, c.y, unitMod.widthFt, unitMod.depthFt, rot);
+        const v = rotateVec(c.nx, c.ny, rot);
         
         // Calculate position to align connector points
         let x = aW.x - p.x;
         let y = aW.y - p.y;
+        
+        // Check connector normal alignment
+        const dot = v.nx * aW.nx + v.ny * aW.ny;
+        
+        // For side-to-side connections (F→B, A→D), normals must be opposite (pointing toward each other)
+        const isSideToSide = 
+          (c.id === "F" && targetConn === "B") ||
+          (c.id === "B" && targetConn === "F") ||
+          (c.id === "A" && targetConn === "D") ||
+          (c.id === "D" && targetConn === "A");
+        
+        if (isSideToSide) {
+          // Side-to-side: normals must be opposite (dot < -0.7)
+          if (dot >= -0.7) {
+            continue; // Skip this rotation - normals not opposite
+          }
+          
+          // Position alongside (walls touching)
+          if ((c.id === "F" && targetConn === "B") ||
+              (c.id === "B" && targetConn === "F")) {
+            // F→B: Corner's left side (F) connects to standard's right side (B)
+            const standardRightEdge = targetUnit.xFt + targetMod.widthFt;
+            x = standardRightEdge; // Corner's left edge at standard's right edge
+          } else if ((c.id === "A" && targetConn === "D") ||
+                     (c.id === "D" && targetConn === "A")) {
+            // A→D: Standard's left side (A) connects to corner's right side (D)
+            const { w } = rotatedSize(unitMod.widthFt, unitMod.depthFt, rot);
+            const standardLeftEdge = targetUnit.xFt;
+            x = standardLeftEdge - w; // Corner's right edge at standard's left edge
+          }
+        }
         
         // For front-to-side connections, ensure corner sits alongside standard (not overlapping)
         if ((c.id === "E" && targetConn === "A") || 
@@ -1033,12 +1099,12 @@ export default function StableConfigurator() {
           // E→A: Position corner to the left of standard
           const { w } = rotatedSize(unitMod.widthFt, unitMod.depthFt, rot);
           const standardLeftEdge = targetUnit.xFt;
-          x = standardLeftEdge - w; // Corner's right edge at standard's left edge
+          x = standardLeftEdge - w;
         } else if ((c.id === "C" && targetConn === "B") ||
                    (c.id === "B" && targetConn === "C")) {
           // C→B: Position corner to the right of standard
           const standardRightEdge = targetUnit.xFt + targetMod.widthFt;
-          x = standardRightEdge; // Corner's left edge at standard's right edge
+          x = standardRightEdge;
         }
         
         // Calculate distance between connector points after positioning
@@ -1573,10 +1639,42 @@ export default function StableConfigurator() {
               }
               
               const p = rotatePoint(c.x, c.y, m.widthFt, m.depthFt, rot);
+              const v = rotateVec(c.nx, c.ny, rot);
               
               // Calculate position to align connector points
               let x = aW.x - p.x;
               let y = aW.y - p.y;
+              
+              // Check connector normal alignment
+              const dot = v.nx * aW.nx + v.ny * aW.ny;
+              
+              // For side-to-side connections (F→B, A→D), normals must be opposite (pointing toward each other)
+              const isSideToSide = 
+                (c.id === "F" && targetConnCandidate.id === "B") ||
+                (c.id === "B" && targetConnCandidate.id === "F") ||
+                (c.id === "A" && targetConnCandidate.id === "D") ||
+                (c.id === "D" && targetConnCandidate.id === "A");
+              
+              if (isSideToSide) {
+                // Side-to-side: normals must be opposite (dot < -0.7)
+                if (dot >= -0.7) {
+                  continue; // Skip this rotation - normals not opposite
+                }
+                
+                // Position alongside (walls touching)
+                if ((c.id === "F" && targetConnCandidate.id === "B") ||
+                    (c.id === "B" && targetConnCandidate.id === "F")) {
+                  // F→B: Corner's left side (F) connects to standard's right side (B)
+                  const standardRightEdge = targetUnit.xFt + targetMod.widthFt;
+                  x = standardRightEdge; // Corner's left edge at standard's right edge
+                } else if ((c.id === "A" && targetConnCandidate.id === "D") ||
+                           (c.id === "D" && targetConnCandidate.id === "A")) {
+                  // A→D: Standard's left side (A) connects to corner's right side (D)
+                  const { w } = rotatedSize(m.widthFt, m.depthFt, rot);
+                  const standardLeftEdge = targetUnit.xFt;
+                  x = standardLeftEdge - w; // Corner's right edge at standard's left edge
+                }
+              }
               
               // For front-to-side connections, ensure corner sits alongside standard (not overlapping)
               if ((c.id === "E" && targetConnCandidate.id === "A") || 
@@ -1584,12 +1682,12 @@ export default function StableConfigurator() {
                 // E→A: Position corner to the left of standard
                 const { w } = rotatedSize(m.widthFt, m.depthFt, rot);
                 const standardLeftEdge = targetUnit.xFt;
-                x = standardLeftEdge - w; // Corner's right edge at standard's left edge
+                x = standardLeftEdge - w;
               } else if ((c.id === "C" && targetConnCandidate.id === "B") ||
                          (c.id === "B" && targetConnCandidate.id === "C")) {
                 // C→B: Position corner to the right of standard
                 const standardRightEdge = targetUnit.xFt + targetMod.widthFt;
-                x = standardRightEdge; // Corner's left edge at standard's right edge
+                x = standardRightEdge;
               }
               
               // Calculate distance between connector points after positioning
