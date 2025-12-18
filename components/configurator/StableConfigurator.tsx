@@ -527,7 +527,8 @@ export default function StableConfigurator() {
     moduleId: string,
     x: number,
     y: number,
-    rot: Rotation
+    rot: Rotation,
+    excludeUid?: string
   ): { uid: string; connId: ConnectorId; distance: number; finalX: number; finalY: number } | null {
     const draggedMod = getModule(moduleId);
     let nearest: { uid: string; connId: ConnectorId; distance: number; finalX: number; finalY: number } | null = null;
@@ -535,8 +536,10 @@ export default function StableConfigurator() {
     
     // Try each connector of the dragged module
     for (const draggedConn of draggedMod.connectors) {
-      // Check against all units
+      // Check against all units (excluding the one being dragged)
       for (const u of units) {
+        if (excludeUid && u.uid === excludeUid) continue; // Skip the unit being dragged
+        
         const m = getModule(u.moduleId);
         for (const conn of m.connectors) {
           if (isUsed(u.uid, conn.id)) continue;
@@ -559,7 +562,7 @@ export default function StableConfigurator() {
             finalY += v.ny * d;
           }
           
-          // Calculate distance from current mouse position to final position
+          // Calculate distance from current position to final position
           const dx = x - finalX;
           const dy = y - finalY;
           const dist = Math.sqrt(dx * dx + dy * dy);
@@ -617,21 +620,20 @@ export default function StableConfigurator() {
         // Check for overlap
         const testUnit: PlacedUnit = { uid: "test", moduleId, xFt: x, yFt: y, rot, selectedExtras: [] };
         const bNew = bbox(testUnit, newMod);
-        let overlaps = false;
+        let hasOverlapCheck = false;
         for (const u of units) {
           const bExisting = bbox(u, getModule(u.moduleId));
           if (hasOverlap(bNew, bExisting)) {
-            overlaps = true;
+            hasOverlapCheck = true;
             break;
           }
         }
         
-        if (overlaps) continue;
+        if (hasOverlapCheck) continue;
 
-        if (!hasOverlap) {
-          best = { rot, conn: newConn.id, x, y };
-          break; // Use first valid match
-        }
+        // Found a valid position
+        best = { rot, conn: newConn.id, x, y };
+        break; // Use first valid match
       }
       if (best) break;
     }
@@ -817,7 +819,7 @@ export default function StableConfigurator() {
       if (unit) {
         const newX = worldPos.x - dragOffset.x;
         const newY = worldPos.y - dragOffset.y;
-        const nearest = findNearestConnector(unit.moduleId, newX, newY, unit.rot);
+        const nearest = findNearestConnector(unit.moduleId, newX, newY, unit.rot, draggingUnitUid);
         setSnappedConnector(nearest ? { uid: nearest.uid, connId: nearest.connId } : null);
       }
     }
@@ -864,7 +866,7 @@ export default function StableConfigurator() {
         
         // Check if snapped to connector - use snapped position
         if (snappedConnector) {
-          const nearest = findNearestConnector(unit.moduleId, finalX, finalY, unit.rot);
+          const nearest = findNearestConnector(unit.moduleId, finalX, finalY, unit.rot, draggingUnitUid);
           if (nearest) {
             finalX = nearest.finalX;
             finalY = nearest.finalY;
@@ -1056,7 +1058,7 @@ export default function StableConfigurator() {
       
       // If snapped, use snapped position
       if (snappedConnector) {
-        const nearest = findNearestConnector(unit.moduleId, previewX, previewY, unit.rot);
+        const nearest = findNearestConnector(unit.moduleId, previewX, previewY, unit.rot, draggingUnitUid);
         if (nearest) {
           previewX = nearest.finalX;
           previewY = nearest.finalY;
