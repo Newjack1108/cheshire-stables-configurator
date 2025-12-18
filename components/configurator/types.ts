@@ -12,11 +12,8 @@ export type FrontFeature =
   | { type: "opening"; fromX: number; toX: number; doors?: DoorLeaf[] }
   | { type: "window"; fromX: number; toX: number };
 
-// Building-type-specific connector IDs
-// Standard buildings: A, B (on opposite sides)
-// RH Corner buildings: C (on front panel next to door), D (on side nearest door)
-// LH Corner buildings: E (on front panel next to door), F (on side nearest door)
-export type ConnectorId = "A" | "B" | "C" | "D" | "E" | "F";
+// Connector IDs: W (West/Left), E (East/Right), N (North/Top), S (South/Bottom)
+export type ConnectorId = "W" | "E" | "N" | "S";
 
 export type ConnectorDef = {
   id: ConnectorId;

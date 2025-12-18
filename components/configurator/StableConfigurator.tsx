@@ -740,10 +740,10 @@ export default function StableConfigurator() {
           
           // Check normal alignment for side-to-side connections
           const isSideToSide = 
-            (draggedConn.connId === "F" && conn.id === "B") ||
-            (draggedConn.connId === "B" && conn.id === "F") ||
-            (draggedConn.connId === "A" && conn.id === "D") ||
-            (draggedConn.connId === "D" && conn.id === "A");
+            (draggedConn.connId === "E" && conn.id === "W") ||
+            (draggedConn.connId === "W" && conn.id === "E") ||
+            (draggedConn.connId === "N" && conn.id === "S") ||
+            (draggedConn.connId === "S" && conn.id === "N");
           
           if (isSideToSide) {
             // For side-to-side, normals must be opposite (pointing toward each other)
@@ -795,15 +795,12 @@ export default function StableConfigurator() {
   // E ↔ A
   // F ↔ B, D
   function canConnect(sourceConn: ConnectorId, targetConn: ConnectorId): boolean {
-    const allowedPairs = [
-      ["A", "B"], ["A", "E"], ["A", "D"],
-      ["B", "F"], ["B", "C"],
-      ["D", "F"]
-    ];
-    // Check both directions since all are bidirectional
-    return allowedPairs.some(([a, b]) => 
-      (sourceConn === a && targetConn === b) || 
-      (sourceConn === b && targetConn === a)
+    // W/E/N/S connectors can connect to opposite sides
+    return (
+      (sourceConn === "W" && targetConn === "E") ||
+      (sourceConn === "E" && targetConn === "W") ||
+      (sourceConn === "N" && targetConn === "S") ||
+      (sourceConn === "S" && targetConn === "N")
     );
   }
 
@@ -915,46 +912,15 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
           let x = aW.x - p.x;
           let y = aW.y - p.y;
           
-          // Check if connector normals allow connection
+          // Check if connector normals allow connection (must be opposite)
           const dot = v.nx * aW.nx + v.ny * aW.ny;
+          const score = -dot; // Better score = more opposite normals
           
-          // For side-to-side connections (A↔D, B↔F), normals must be opposite
-          const isSideToSide = 
-            (c.id === "F" && targetConnCandidate.id === "B") ||
-            (c.id === "B" && targetConnCandidate.id === "F") ||
-            (c.id === "A" && targetConnCandidate.id === "D") ||
-            (c.id === "D" && targetConnCandidate.id === "A");
+          // Position the new box so connectors align
+          // No offset needed - connectors should align exactly
           
-          if (isSideToSide) {
-            // Side-to-side: normals must be opposite (pointing toward each other)
-            if (dot >= -0.7) {
-              continue; // Skip this rotation - normals not opposite
-            }
-          }
-          
-          // Offset to prevent overlap: move source module away by its dimension in direction of source normal
-          // This works for both side-to-side and front-to-side connections
-          const { w, d } = rotatedSize(newMod.widthFt, newMod.depthFt, rot);
-          if (Math.abs(v.nx) > Math.abs(v.ny)) {
-            // Horizontal connector: offset by width
-            x += v.nx * w;
-          } else {
-            // Vertical connector: offset by depth
-            y += v.ny * d;
-          }
-          
-          // Calculate distance between connector points after positioning
-          // This should be close to 0 when connectors are properly aligned
-          const connDist = Math.sqrt((x + p.x - aW.x) ** 2 + (y + p.y - aW.y) ** 2);
-          
-          // Accept if connectors are close enough (within tolerance)
-          // Closer distance = better connection
-          if (connDist < 0.1) {
-            const score = connDist; // Closer to 0 = better
-            
-            if (!best || score < best.score) {
-              best = { rot, conn: c.id, x, y, score };
-            }
+          if (!best || score < best.score) {
+            best = { rot, conn: c.id, x, y, score };
           }
         }
       }
@@ -982,21 +948,17 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
 
     const bNew = bbox(newUnit, newMod);
     
-    // Check for overlaps - be lenient since boxes attached via connectors should be positioned correctly
+    // Check for overlaps - very lenient since boxes attached via connectors should be positioned correctly
     for (const u of units) {
       const bExisting = bbox(u, getModule(u.moduleId));
       
-      // Use a more lenient tolerance for boxes attached via connectors
-      // Allow boxes that are touching or very close (within 0.5ft)
-      const tolerance = 0.5;
-      
-      // Check if boxes actually overlap (not just touching)
-      // Only flag if there's significant interior overlap
+      // Only flag as overlap if there's significant interior overlap (more than 1ft)
+      // This allows boxes that are touching or very close
       const overlapX = Math.min(bNew.x + bNew.w, bExisting.x + bExisting.w) - Math.max(bNew.x, bExisting.x);
       const overlapY = Math.min(bNew.y + bNew.d, bExisting.y + bExisting.d) - Math.max(bNew.y, bExisting.y);
       
-      // Only flag as overlap if there's meaningful interior overlap (more than tolerance)
-      if (overlapX > tolerance && overlapY > tolerance) {
+      // Only flag if there's meaningful interior overlap (more than 1ft in both dimensions)
+      if (overlapX > 1.0 && overlapY > 1.0) {
         return alert("Overlap");
       }
     }
@@ -1094,10 +1056,10 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
         
         // For side-to-side connections (A↔D, B↔F), normals must be opposite
         const isSideToSide = 
-          (c.id === "F" && targetConn === "B") ||
-          (c.id === "B" && targetConn === "F") ||
-          (c.id === "A" && targetConn === "D") ||
-          (c.id === "D" && targetConn === "A");
+          (c.id === "E" && targetConn === "W") ||
+          (c.id === "W" && targetConn === "E") ||
+          (c.id === "N" && targetConn === "S") ||
+          (c.id === "S" && targetConn === "N");
         
         if (isSideToSide) {
           // Side-to-side: normals must be opposite (pointing toward each other)
@@ -1660,10 +1622,10 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
               
               // For side-to-side connections (A↔D, B↔F), normals must be opposite
               const isSideToSide = 
-                (c.id === "F" && targetConnCandidate.id === "B") ||
-                (c.id === "B" && targetConnCandidate.id === "F") ||
-                (c.id === "A" && targetConnCandidate.id === "D") ||
-                (c.id === "D" && targetConnCandidate.id === "A");
+                (c.id === "E" && targetConnCandidate.id === "W") ||
+                (c.id === "W" && targetConnCandidate.id === "E") ||
+                (c.id === "N" && targetConnCandidate.id === "S") ||
+                (c.id === "S" && targetConnCandidate.id === "N");
               
               if (isSideToSide) {
                 // Side-to-side: normals must be opposite (pointing toward each other)
@@ -2162,7 +2124,7 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
               Standard Stables
             </div>
             <button
-              onClick={() => attach("stable_6x12", "B")}
+              onClick={() => attach("stable_6x12", "E")}
               style={{
                 padding: "14px 20px",
                 backgroundColor: DARK_GREEN,
@@ -2197,7 +2159,7 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
               + Add Stable 6x12
             </button>
             <button
-              onClick={() => attach("stable_8x12", "B")}
+              onClick={() => attach("stable_8x12", "E")}
               style={{
                 padding: "14px 20px",
                 backgroundColor: DARK_GREEN,
@@ -2232,7 +2194,7 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
               + Add Stable 8x12
             </button>
             <button
-              onClick={() => attach("stable_10x12", "B")}
+              onClick={() => attach("stable_10x12", "E")}
               style={{
                 padding: "14px 20px",
                 backgroundColor: DARK_GREEN,
@@ -2267,7 +2229,7 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
               + Add Stable 10x12
             </button>
             <button
-              onClick={() => attach("stable_12x12", "B")}
+              onClick={() => attach("stable_12x12", "E")}
               style={{
                 padding: "14px 20px",
                 backgroundColor: DARK_GREEN,
@@ -2302,7 +2264,7 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
               + Add Stable 12x12
             </button>
             <button
-              onClick={() => attach("stable_14x12", "B")}
+              onClick={() => attach("stable_14x12", "E")}
               style={{
                 padding: "14px 20px",
                 backgroundColor: DARK_GREEN,
@@ -2337,7 +2299,7 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
               + Add Stable 14x12
             </button>
             <button
-              onClick={() => attach("stable_16x12", "B")}
+              onClick={() => attach("stable_16x12", "E")}
               style={{
                 padding: "14px 20px",
                 backgroundColor: DARK_GREEN,
@@ -2384,7 +2346,7 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
               Other Modules
             </div>
             <button
-              onClick={() => attach("shelter_12x12", "B")}
+              onClick={() => attach("shelter_12x12", "E")}
               style={{
                 padding: "14px 20px",
                 backgroundColor: DARK_GREEN,
@@ -2419,7 +2381,7 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
               + Add Shelter
             </button>
             <button
-              onClick={() => attach("corner_lh_16x12", "E")}
+              onClick={() => attach("corner_16x12", "E")}
               style={{
                 padding: "14px 20px",
                 backgroundColor: DARK_GREEN,
@@ -2454,7 +2416,7 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
               + Add LH Corner Stable
             </button>
             <button
-              onClick={() => attach("corner_rh_16x12", "C")}
+              onClick={() => attach("corner_16x12", "E")}
               style={{
                 padding: "14px 20px",
                 backgroundColor: DARK_GREEN,
@@ -2489,7 +2451,7 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
               + Add RH Corner Stable
             </button>
             <button
-              onClick={() => attach("tack_room_12x12", "B")}
+              onClick={() => attach("tack_room_12x12", "E")}
               style={{
                 padding: "14px 20px",
                 backgroundColor: DARK_GREEN,
