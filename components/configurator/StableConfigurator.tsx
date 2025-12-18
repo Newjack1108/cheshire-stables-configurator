@@ -931,10 +931,26 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
           }
           
           // Calculate wall offset to position modules alongside each other
-          // This works for both side-to-side and front-to-side connections
-          const wallOffset = calculateWallOffset(v, aW, { w: newMod.widthFt, d: newMod.depthFt }, rot);
-          x += wallOffset.offsetX;
-          y += wallOffset.offsetY;
+          // For side-to-side: connectors are on edges, so aligning them causes overlap
+          // We need to offset the source module away from target by its dimension
+          // For front-to-side: apply calculated offset
+          if (isSideToSide) {
+            // Side-to-side: offset source module away from target by its dimension
+            // Move in direction of source normal (away from target)
+            const { w, d } = rotatedSize(newMod.widthFt, newMod.depthFt, rot);
+            if (Math.abs(v.nx) > Math.abs(v.ny)) {
+              // Horizontal: offset by width
+              x += v.nx * w;
+            } else {
+              // Vertical: offset by depth
+              y += v.ny * d;
+            }
+          } else {
+            // Front-to-side: use calculated offset
+            const wallOffset = calculateWallOffset(v, aW, { w: newMod.widthFt, d: newMod.depthFt }, rot);
+            x += wallOffset.offsetX;
+            y += wallOffset.offsetY;
+          }
           
           // Calculate distance between connector points after positioning
           // This should be close to 0 when connectors are properly aligned
@@ -1100,10 +1116,26 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
         }
         
         // Calculate wall offset to position modules alongside each other
-        // This works for both side-to-side and front-to-side connections
-        const wallOffset = calculateWallOffset(v, aW, { w: unitMod.widthFt, d: unitMod.depthFt }, rot);
-        x += wallOffset.offsetX;
-        y += wallOffset.offsetY;
+        // For side-to-side: connectors are on edges, so aligning them causes overlap
+        // We need to offset the source module away from target by its dimension
+        // For front-to-side: apply calculated offset
+        if (isSideToSide) {
+          // Side-to-side: offset source module away from target by its dimension
+          // Move in direction of source normal (away from target)
+          const { w, d } = rotatedSize(unitMod.widthFt, unitMod.depthFt, rot);
+          if (Math.abs(v.nx) > Math.abs(v.ny)) {
+            // Horizontal: offset by width
+            x += v.nx * w;
+          } else {
+            // Vertical: offset by depth
+            y += v.ny * d;
+          }
+        } else {
+          // Front-to-side: use calculated offset
+          const wallOffset = calculateWallOffset(v, aW, { w: unitMod.widthFt, d: unitMod.depthFt }, rot);
+          x += wallOffset.offsetX;
+          y += wallOffset.offsetY;
+        }
         
         // Calculate distance between connector points after positioning
         const connDist = Math.sqrt((x + p.x - aW.x) ** 2 + (y + p.y - aW.y) ** 2);
@@ -1661,10 +1693,26 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
               }
               
               // Calculate wall offset to position modules alongside each other
-              // This works for both side-to-side and front-to-side connections
-              const wallOffset = calculateWallOffset(v, aW, { w: m.widthFt, d: m.depthFt }, rot);
-              x += wallOffset.offsetX;
-              y += wallOffset.offsetY;
+              // For side-to-side: connectors are on edges, so aligning them causes overlap
+              // We need to offset the source module away from target by its dimension
+              // For front-to-side: apply calculated offset
+              if (isSideToSide) {
+                // Side-to-side: offset source module away from target by its dimension
+                // Move in direction of source normal (away from target)
+                const { w, d } = rotatedSize(m.widthFt, m.depthFt, rot);
+                if (Math.abs(v.nx) > Math.abs(v.ny)) {
+                  // Horizontal: offset by width
+                  x += v.nx * w;
+                } else {
+                  // Vertical: offset by depth
+                  y += v.ny * d;
+                }
+              } else {
+                // Front-to-side: use calculated offset
+                const wallOffset = calculateWallOffset(v, aW, { w: m.widthFt, d: m.depthFt }, rot);
+                x += wallOffset.offsetX;
+                y += wallOffset.offsetY;
+              }
               
               // Calculate distance between connector points after positioning
               const connDist = Math.sqrt((x + p.x - aW.x) ** 2 + (y + p.y - aW.y) ** 2);
