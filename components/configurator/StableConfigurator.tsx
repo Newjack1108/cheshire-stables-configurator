@@ -911,79 +911,44 @@ export default function StableConfigurator() {
           
           if (c.id === "C" && targetConnCandidate.id === "B") {
             // RH Corner C (front panel) connects to B (side)
-            // Connector vectors should be perpendicular, connecting walls should be parallel
+            // Connector vectors should be perpendicular
             if (Math.abs(dot) < 0.3) {
-              // Check if the connecting walls are parallel
-              const cornerWallDir = getConnectorWallDirection(c.nx, c.ny, rot);
-              const standardWallDir = getConnectorWallDirection(targetConnCandidate.nx, targetConnCandidate.ny, sourceUnit.rot);
-              
-              // Walls are parallel if they face the same direction
-              if (cornerWallDir === standardWallDir) {
-                isValidConnection = true;
-                score = Math.abs(dot); // Closer to 0 = better
-              }
+              isValidConnection = true;
+              score = Math.abs(dot); // Closer to 0 = better
             }
           } else if (c.id === "D" && targetConnCandidate.id === "A") {
             // RH Corner D (side) connects to A (side)
-            // Connector vectors should be opposite, connecting walls should be parallel
+            // Connector vectors should be opposite
             if (dot < -0.7) {
-              // Check if the connecting walls are parallel
-              const cornerWallDir = getConnectorWallDirection(c.nx, c.ny, rot);
-              const standardWallDir = getConnectorWallDirection(targetConnCandidate.nx, targetConnCandidate.ny, sourceUnit.rot);
-              
-              // Walls are parallel if they face the same direction
-              if (cornerWallDir === standardWallDir) {
-                isValidConnection = true;
-                score = -dot; // More negative = better
-              }
+              isValidConnection = true;
+              score = -dot; // More negative = better
             }
           } else if (c.id === "E" && targetConnCandidate.id === "A") {
             // LH Corner E (front panel) connects to A (side)
-            // Connector vectors should be perpendicular, connecting walls should be parallel
+            // Connector vectors should be perpendicular
             if (Math.abs(dot) < 0.3) {
-              // Check if the connecting walls are parallel
-              const cornerWallDir = getConnectorWallDirection(c.nx, c.ny, rot);
-              const standardWallDir = getConnectorWallDirection(targetConnCandidate.nx, targetConnCandidate.ny, sourceUnit.rot);
-              
-              // Walls are parallel if they face the same direction
-              if (cornerWallDir === standardWallDir) {
-                isValidConnection = true;
-                score = Math.abs(dot); // Closer to 0 = better
-              }
+              isValidConnection = true;
+              score = Math.abs(dot); // Closer to 0 = better
             }
           } else if (c.id === "F" && targetConnCandidate.id === "B") {
             // LH Corner F (side) connects to B (side)
-            // Connector vectors should be opposite, connecting walls should be parallel
+            // Connector vectors should be opposite
             if (dot < -0.7) {
-              // Check if the connecting walls are parallel
-              const cornerWallDir = getConnectorWallDirection(c.nx, c.ny, rot);
-              const standardWallDir = getConnectorWallDirection(targetConnCandidate.nx, targetConnCandidate.ny, sourceUnit.rot);
-              
-              // Walls are parallel if they face the same direction
-              if (cornerWallDir === standardWallDir) {
-                isValidConnection = true;
-                score = -dot; // More negative = better
-              }
+              isValidConnection = true;
+              score = -dot; // More negative = better
             }
           } else if ((c.id === "A" || c.id === "B") && (targetConnCandidate.id === "A" || targetConnCandidate.id === "B")) {
-            // Standard to standard: opposite connector directions (perpendicular front panels not required)
+            // Standard to standard: opposite connector directions
             if (dot < -0.7) {
               isValidConnection = true;
               score = -dot;
             }
           } else if ((c.id === "C" || c.id === "D" || c.id === "E" || c.id === "F") && 
                      (targetConnCandidate.id === "C" || targetConnCandidate.id === "D" || targetConnCandidate.id === "E" || targetConnCandidate.id === "F")) {
-            // Corner to corner: connectors perpendicular, connecting walls should be parallel
+            // Corner to corner: connectors perpendicular
             if (Math.abs(dot) < 0.3) {
-              // Check if the connecting walls are parallel
-              const corner1WallDir = getConnectorWallDirection(c.nx, c.ny, rot);
-              const corner2WallDir = getConnectorWallDirection(targetConnCandidate.nx, targetConnCandidate.ny, sourceUnit.rot);
-              
-              // Walls are parallel if they face the same direction
-              if (corner1WallDir === corner2WallDir) {
-                isValidConnection = true;
-                score = Math.abs(dot);
-              }
+              isValidConnection = true;
+              score = Math.abs(dot);
             }
           }
           
@@ -1140,79 +1105,44 @@ export default function StableConfigurator() {
         
         if (c.id === "C" && targetConn === "B") {
           // RH Corner C (front panel) connects to B (side)
-          // Connector vectors should be perpendicular, connecting walls should be parallel
+          // Connector vectors should be perpendicular
           if (Math.abs(dot) < 0.3) {
-            // Check if the connecting walls are parallel
-            const cornerWallDir = getConnectorWallDirection(c.nx, c.ny, rot);
-            const standardWallDir = getConnectorWallDirection(targetConnDef.nx, targetConnDef.ny, targetUnit.rot);
-            
-            // Walls are parallel if they face the same direction
-            if (cornerWallDir === standardWallDir) {
-              isValidConnection = true;
-              score = Math.abs(dot);
-            }
+            isValidConnection = true;
+            score = Math.abs(dot);
           }
         } else if (c.id === "D" && targetConn === "A") {
           // RH Corner D (side) connects to A (side)
-          // Connector vectors should be opposite, connecting walls should be parallel
+          // Connector vectors should be opposite
           if (dot < -0.7) {
-            // Check if the connecting walls are parallel
-            const cornerWallDir = getConnectorWallDirection(c.nx, c.ny, rot);
-            const standardWallDir = getConnectorWallDirection(targetConnDef.nx, targetConnDef.ny, targetUnit.rot);
-            
-            // Walls are parallel if they face the same direction
-            if (cornerWallDir === standardWallDir) {
-              isValidConnection = true;
-              score = -dot;
-            }
+            isValidConnection = true;
+            score = -dot;
           }
         } else if (c.id === "E" && targetConn === "A") {
           // LH Corner E (front panel) connects to A (side)
-          // Connector vectors should be perpendicular, connecting walls should be parallel
+          // Connector vectors should be perpendicular
           if (Math.abs(dot) < 0.3) {
-            // Check if the connecting walls are parallel
-            const cornerWallDir = getConnectorWallDirection(c.nx, c.ny, rot);
-            const standardWallDir = getConnectorWallDirection(targetConnDef.nx, targetConnDef.ny, targetUnit.rot);
-            
-            // Walls are parallel if they face the same direction
-            if (cornerWallDir === standardWallDir) {
-              isValidConnection = true;
-              score = Math.abs(dot);
-            }
+            isValidConnection = true;
+            score = Math.abs(dot);
           }
         } else if (c.id === "F" && targetConn === "B") {
           // LH Corner F (side) connects to B (side)
-          // Connector vectors should be opposite, connecting walls should be parallel
+          // Connector vectors should be opposite
           if (dot < -0.7) {
-            // Check if the connecting walls are parallel
-            const cornerWallDir = getConnectorWallDirection(c.nx, c.ny, rot);
-            const standardWallDir = getConnectorWallDirection(targetConnDef.nx, targetConnDef.ny, targetUnit.rot);
-            
-            // Walls are parallel if they face the same direction
-            if (cornerWallDir === standardWallDir) {
-              isValidConnection = true;
-              score = -dot;
-            }
+            isValidConnection = true;
+            score = -dot;
           }
         } else if ((c.id === "A" || c.id === "B") && (targetConn === "A" || targetConn === "B")) {
-          // Standard to standard: opposite connector directions (perpendicular front panels not required)
+          // Standard to standard: opposite connector directions
           if (dot < -0.7) {
             isValidConnection = true;
             score = -dot;
           }
         } else if ((c.id === "C" || c.id === "D" || c.id === "E" || c.id === "F") && 
                    (targetConn === "C" || targetConn === "D" || targetConn === "E" || targetConn === "F")) {
-          // Corner to corner: connectors perpendicular, connecting walls should be parallel
+          // Corner to corner: connectors perpendicular
           if (Math.abs(dot) < 0.3) {
-            // Check if the connecting walls are parallel
-            const corner1WallDir = getConnectorWallDirection(c.nx, c.ny, rot);
-            const corner2WallDir = getConnectorWallDirection(targetConnDef.nx, targetConnDef.ny, targetUnit.rot);
-            
-            // Walls are parallel if they face the same direction
-            if (corner1WallDir === corner2WallDir) {
-              isValidConnection = true;
-              score = Math.abs(dot);
-            }
+            isValidConnection = true;
+            score = Math.abs(dot);
           }
         }
         
@@ -1762,59 +1692,31 @@ export default function StableConfigurator() {
               
               if (c.id === "C" && targetConnCandidate.id === "B") {
                 // RH Corner C (front panel) connects to B (side)
-                // Connector vectors should be perpendicular, connecting walls should be parallel
+                // Connector vectors should be perpendicular
                 if (Math.abs(dot) < 0.3) {
-                  // Check if the connecting walls are parallel
-                  const cornerWallDir = getConnectorWallDirection(c.nx, c.ny, rot);
-                  const standardWallDir = getConnectorWallDirection(targetConnCandidate.nx, targetConnCandidate.ny, targetUnit.rot);
-                  
-                  // Walls are parallel if they face the same direction
-                  if (cornerWallDir === standardWallDir) {
-                    isValidConnection = true;
-                    score = Math.abs(dot);
-                  }
+                  isValidConnection = true;
+                  score = Math.abs(dot);
                 }
               } else if (c.id === "D" && targetConnCandidate.id === "A") {
                 // RH Corner D (side) connects to A (side)
-                // Connector vectors should be opposite, connecting walls should be parallel
+                // Connector vectors should be opposite
                 if (dot < -0.7) {
-                  // Check if the connecting walls are parallel
-                  const cornerWallDir = getConnectorWallDirection(c.nx, c.ny, rot);
-                  const standardWallDir = getConnectorWallDirection(targetConnCandidate.nx, targetConnCandidate.ny, targetUnit.rot);
-                  
-                  // Walls are parallel if they face the same direction
-                  if (cornerWallDir === standardWallDir) {
-                    isValidConnection = true;
-                    score = -dot;
-                  }
+                  isValidConnection = true;
+                  score = -dot;
                 }
               } else if (c.id === "E" && targetConnCandidate.id === "A") {
                 // LH Corner E (front panel) connects to A (side)
-                // Connector vectors should be perpendicular, connecting walls should be parallel
+                // Connector vectors should be perpendicular
                 if (Math.abs(dot) < 0.3) {
-                  // Check if the connecting walls are parallel
-                  const cornerWallDir = getConnectorWallDirection(c.nx, c.ny, rot);
-                  const standardWallDir = getConnectorWallDirection(targetConnCandidate.nx, targetConnCandidate.ny, targetUnit.rot);
-                  
-                  // Walls are parallel if they face the same direction
-                  if (cornerWallDir === standardWallDir) {
-                    isValidConnection = true;
-                    score = Math.abs(dot);
-                  }
+                  isValidConnection = true;
+                  score = Math.abs(dot);
                 }
               } else if (c.id === "F" && targetConnCandidate.id === "B") {
                 // LH Corner F (side) connects to B (side)
-                // Connector vectors should be opposite, connecting walls should be parallel
+                // Connector vectors should be opposite
                 if (dot < -0.7) {
-                  // Check if the connecting walls are parallel
-                  const cornerWallDir = getConnectorWallDirection(c.nx, c.ny, rot);
-                  const standardWallDir = getConnectorWallDirection(targetConnCandidate.nx, targetConnCandidate.ny, targetUnit.rot);
-                  
-                  // Walls are parallel if they face the same direction
-                  if (cornerWallDir === standardWallDir) {
-                    isValidConnection = true;
-                    score = -dot;
-                  }
+                  isValidConnection = true;
+                  score = -dot;
                 }
               } else if ((c.id === "A" || c.id === "B") && (targetConnCandidate.id === "A" || targetConnCandidate.id === "B")) {
                 // Standard to standard: opposite connector directions
@@ -1824,17 +1726,10 @@ export default function StableConfigurator() {
                 }
               } else if ((c.id === "C" || c.id === "D" || c.id === "E" || c.id === "F") && 
                          (targetConnCandidate.id === "C" || targetConnCandidate.id === "D" || targetConnCandidate.id === "E" || targetConnCandidate.id === "F")) {
-                // Corner to corner: connectors perpendicular, connecting walls should be parallel
+                // Corner to corner: connectors perpendicular
                 if (Math.abs(dot) < 0.3) {
-                  // Check if the connecting walls are parallel
-                  const corner1WallDir = getConnectorWallDirection(c.nx, c.ny, rot);
-                  const corner2WallDir = getConnectorWallDirection(targetConnCandidate.nx, targetConnCandidate.ny, targetUnit.rot);
-                  
-                  // Walls are parallel if they face the same direction
-                  if (corner1WallDir === corner2WallDir) {
-                    isValidConnection = true;
-                    score = Math.abs(dot);
-                  }
+                  isValidConnection = true;
+                  score = Math.abs(dot);
                 }
               }
               
