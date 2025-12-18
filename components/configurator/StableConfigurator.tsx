@@ -853,35 +853,43 @@ export default function StableConfigurator() {
           // Calculate score based on connector alignment
           const dot = v.nx * aW.nx + v.ny * aW.ny;
           
-          // C connector (front panel) connects perpendicular to A/B (side connectors)
-          // D connector (side) connects opposite to A/B (side connectors)
+          // Check if front panels are perpendicular when connecting
+          const newFrontFace = getFrontFace(rot);
+          const targetFrontFace = getFrontFace(sourceUnit.rot);
+          
+          // Front panels should be perpendicular (not parallel)
+          const frontFacesPerpendicular = 
+            (newFrontFace === "N" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
+            (newFrontFace === "S" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
+            (newFrontFace === "E" && (targetFrontFace === "N" || targetFrontFace === "S")) ||
+            (newFrontFace === "W" && (targetFrontFace === "N" || targetFrontFace === "S"));
+          
           let isValidConnection = false;
           let score = 0;
           
           if (c.id === "C" && (targetConnCandidate.id === "A" || targetConnCandidate.id === "B")) {
-            // C (front panel) should be perpendicular to A/B (side)
-            // Dot product should be close to 0 (perpendicular)
-            if (Math.abs(dot) < 0.3) {
+            // C (front panel) connects to A/B (side)
+            // Connector vectors should be perpendicular, and front panels should be perpendicular
+            if (Math.abs(dot) < 0.3 && frontFacesPerpendicular) {
               isValidConnection = true;
               score = Math.abs(dot); // Closer to 0 = better
             }
           } else if (c.id === "D" && (targetConnCandidate.id === "A" || targetConnCandidate.id === "B")) {
-            // D (side) should be opposite to A/B (side)
-            if (dot < -0.7) {
+            // D (side) connects to A/B (side)
+            // Connector vectors should be opposite, and front panels should be perpendicular
+            if (dot < -0.7 && frontFacesPerpendicular) {
               isValidConnection = true;
               score = -dot; // More negative = better
             }
           } else if ((c.id === "A" || c.id === "B") && (targetConnCandidate.id === "A" || targetConnCandidate.id === "B")) {
-            // Standard to standard: opposite directions
-            if (dot < -0.7) {
+            // Standard to standard: opposite connector directions, front panels perpendicular
+            if (dot < -0.7 && frontFacesPerpendicular) {
               isValidConnection = true;
               score = -dot;
             }
           } else if ((c.id === "C" || c.id === "D") && (targetConnCandidate.id === "C" || targetConnCandidate.id === "D")) {
-            // Corner to corner: can connect C to D or vice versa
-            // C (front) to D (side) should be perpendicular
-            // D (side) to C (front) should be perpendicular
-            if (Math.abs(dot) < 0.3) {
+            // Corner to corner: connectors perpendicular, front panels perpendicular
+            if (Math.abs(dot) < 0.3 && frontFacesPerpendicular) {
               isValidConnection = true;
               score = Math.abs(dot);
             }
@@ -1082,32 +1090,43 @@ export default function StableConfigurator() {
         // Calculate score based on connector alignment
         const dot = v.nx * aW.nx + v.ny * aW.ny;
         
-        // C connector (front panel) connects perpendicular to A/B (side connectors)
-        // D connector (side) connects opposite to A/B (side connectors)
+        // Check if front panels are perpendicular when connecting
+        const newFrontFace = getFrontFace(rot);
+        const targetFrontFace = getFrontFace(targetUnit.rot);
+        
+        // Front panels should be perpendicular (not parallel)
+        const frontFacesPerpendicular = 
+          (newFrontFace === "N" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
+          (newFrontFace === "S" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
+          (newFrontFace === "E" && (targetFrontFace === "N" || targetFrontFace === "S")) ||
+          (newFrontFace === "W" && (targetFrontFace === "N" || targetFrontFace === "S"));
+        
         let isValidConnection = false;
         let score = 0;
         
         if (c.id === "C" && (targetConn === "A" || targetConn === "B")) {
-          // C (front panel) should be perpendicular to A/B (side)
-          if (Math.abs(dot) < 0.3) {
+          // C (front panel) connects to A/B (side)
+          // Connector vectors should be perpendicular, and front panels should be perpendicular
+          if (Math.abs(dot) < 0.3 && frontFacesPerpendicular) {
             isValidConnection = true;
             score = Math.abs(dot);
           }
         } else if (c.id === "D" && (targetConn === "A" || targetConn === "B")) {
-          // D (side) should be opposite to A/B (side)
-          if (dot < -0.7) {
+          // D (side) connects to A/B (side)
+          // Connector vectors should be opposite, and front panels should be perpendicular
+          if (dot < -0.7 && frontFacesPerpendicular) {
             isValidConnection = true;
             score = -dot;
           }
         } else if ((c.id === "A" || c.id === "B") && (targetConn === "A" || targetConn === "B")) {
-          // Standard to standard: opposite directions
-          if (dot < -0.7) {
+          // Standard to standard: opposite connector directions, front panels perpendicular
+          if (dot < -0.7 && frontFacesPerpendicular) {
             isValidConnection = true;
             score = -dot;
           }
         } else if ((c.id === "C" || c.id === "D") && (targetConn === "C" || targetConn === "D")) {
-          // Corner to corner: perpendicular
-          if (Math.abs(dot) < 0.3) {
+          // Corner to corner: connectors perpendicular, front panels perpendicular
+          if (Math.abs(dot) < 0.3 && frontFacesPerpendicular) {
             isValidConnection = true;
             score = Math.abs(dot);
           }
@@ -1657,32 +1676,43 @@ export default function StableConfigurator() {
               // Calculate score based on connector alignment
               const dot = v.nx * aW.nx + v.ny * aW.ny;
               
-              // C connector (front panel) connects perpendicular to A/B (side connectors)
-              // D connector (side) connects opposite to A/B (side connectors)
+              // Check if front panels are perpendicular when connecting
+              const newFrontFace = getFrontFace(rot);
+              const targetFrontFace = getFrontFace(targetUnit.rot);
+              
+              // Front panels should be perpendicular (not parallel)
+              const frontFacesPerpendicular = 
+                (newFrontFace === "N" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
+                (newFrontFace === "S" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
+                (newFrontFace === "E" && (targetFrontFace === "N" || targetFrontFace === "S")) ||
+                (newFrontFace === "W" && (targetFrontFace === "N" || targetFrontFace === "S"));
+              
               let isValidConnection = false;
               let score = 0;
               
               if (c.id === "C" && (targetConnCandidate.id === "A" || targetConnCandidate.id === "B")) {
-                // C (front panel) should be perpendicular to A/B (side)
-                if (Math.abs(dot) < 0.3) {
+                // C (front panel) connects to A/B (side)
+                // Connector vectors should be perpendicular, and front panels should be perpendicular
+                if (Math.abs(dot) < 0.3 && frontFacesPerpendicular) {
                   isValidConnection = true;
                   score = Math.abs(dot);
                 }
               } else if (c.id === "D" && (targetConnCandidate.id === "A" || targetConnCandidate.id === "B")) {
-                // D (side) should be opposite to A/B (side)
-                if (dot < -0.7) {
+                // D (side) connects to A/B (side)
+                // Connector vectors should be opposite, and front panels should be perpendicular
+                if (dot < -0.7 && frontFacesPerpendicular) {
                   isValidConnection = true;
                   score = -dot;
                 }
               } else if ((c.id === "A" || c.id === "B") && (targetConnCandidate.id === "A" || targetConnCandidate.id === "B")) {
-                // Standard to standard: opposite directions
-                if (dot < -0.7) {
+                // Standard to standard: opposite connector directions, front panels perpendicular
+                if (dot < -0.7 && frontFacesPerpendicular) {
                   isValidConnection = true;
                   score = -dot;
                 }
               } else if ((c.id === "C" || c.id === "D") && (targetConnCandidate.id === "C" || targetConnCandidate.id === "D")) {
-                // Corner to corner: perpendicular
-                if (Math.abs(dot) < 0.3) {
+                // Corner to corner: connectors perpendicular, front panels perpendicular
+                if (Math.abs(dot) < 0.3 && frontFacesPerpendicular) {
                   isValidConnection = true;
                   score = Math.abs(dot);
                 }
