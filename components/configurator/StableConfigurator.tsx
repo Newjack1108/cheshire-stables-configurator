@@ -911,17 +911,26 @@ export default function StableConfigurator() {
           
           if (c.id === "C" && targetConnCandidate.id === "B") {
             // RH Corner C (front panel) connects to B (side)
-            // Connector vectors should be perpendicular
+            // Corner's front wall should align with standard's right wall
+            // C's normal (0,1) at rot=0 points down from front
+            // At rot=270: C moves to right side with normal (1,0) pointing right - matches B!
+            // At rot=90: C moves to left side with normal (-1,0) pointing left - wrong!
             if (Math.abs(dot) < 0.3) {
-              isValidConnection = true;
-              score = Math.abs(dot); // Closer to 0 = better
+              const isCorrectRotation = (rot === 270); // Front wall becomes right wall
+              if (isCorrectRotation) {
+                isValidConnection = true;
+                score = Math.abs(dot);
+              }
             }
           } else if (c.id === "B" && targetConnCandidate.id === "C") {
             // Standard B connects to RH Corner C (front panel)
-            // Connector vectors should be perpendicular
+            // Same logic: corner's front wall should align with standard's right wall
             if (Math.abs(dot) < 0.3) {
-              isValidConnection = true;
-              score = Math.abs(dot); // Closer to 0 = better
+              const isCorrectRotation = (rot === 270);
+              if (isCorrectRotation) {
+                isValidConnection = true;
+                score = Math.abs(dot);
+              }
             }
           } else if (c.id === "D" && targetConnCandidate.id === "A") {
             // RH Corner D (side) connects to A (side)
@@ -939,17 +948,26 @@ export default function StableConfigurator() {
             }
           } else if (c.id === "E" && targetConnCandidate.id === "A") {
             // LH Corner E (front panel) connects to A (side)
-            // Connector vectors should be perpendicular
+            // Corner's front wall should align with standard's left wall
+            // E's normal (0,1) at rot=0 points down from front
+            // At rot=90: E moves to left side with normal (-1,0) pointing left - matches A!
+            // At rot=270: E moves to right side with normal (1,0) pointing right - wrong!
             if (Math.abs(dot) < 0.3) {
-              isValidConnection = true;
-              score = Math.abs(dot); // Closer to 0 = better
+              const isCorrectRotation = (rot === 90); // Front wall becomes left wall
+              if (isCorrectRotation) {
+                isValidConnection = true;
+                score = Math.abs(dot);
+              }
             }
           } else if (c.id === "A" && targetConnCandidate.id === "E") {
             // Standard A connects to LH Corner E (front panel)
-            // Connector vectors should be perpendicular
+            // Same logic: corner's front wall should align with standard's left wall
             if (Math.abs(dot) < 0.3) {
-              isValidConnection = true;
-              score = Math.abs(dot); // Closer to 0 = better
+              const isCorrectRotation = (rot === 90);
+              if (isCorrectRotation) {
+                isValidConnection = true;
+                score = Math.abs(dot);
+              }
             }
           } else if (c.id === "F" && targetConnCandidate.id === "B") {
             // LH Corner F (side) connects to B (side)
@@ -1133,15 +1151,16 @@ export default function StableConfigurator() {
         
         if (c.id === "C" && targetConn === "B") {
           // RH Corner C (front panel) connects to B (side)
-          // Connector vectors should be perpendicular
-          if (Math.abs(dot) < 0.3) {
+          // Corner's front wall should align with standard's right wall
+          // At rot=270: C moves to right side with normal (1,0) - matches B!
+          if (Math.abs(dot) < 0.3 && rot === 270) {
             isValidConnection = true;
             score = Math.abs(dot);
           }
         } else if (c.id === "B" && targetConn === "C") {
           // Standard B connects to RH Corner C (front panel)
-          // Connector vectors should be perpendicular
-          if (Math.abs(dot) < 0.3) {
+          // Same logic: corner's front wall should align with standard's right wall
+          if (Math.abs(dot) < 0.3 && rot === 270) {
             isValidConnection = true;
             score = Math.abs(dot);
           }
@@ -1161,15 +1180,16 @@ export default function StableConfigurator() {
           }
         } else if (c.id === "E" && targetConn === "A") {
           // LH Corner E (front panel) connects to A (side)
-          // Connector vectors should be perpendicular
-          if (Math.abs(dot) < 0.3) {
+          // Corner's front wall should align with standard's left wall
+          // At rot=90: E moves to left side with normal (-1,0) - matches A!
+          if (Math.abs(dot) < 0.3 && rot === 90) {
             isValidConnection = true;
             score = Math.abs(dot);
           }
         } else if (c.id === "A" && targetConn === "E") {
           // Standard A connects to LH Corner E (front panel)
-          // Connector vectors should be perpendicular
-          if (Math.abs(dot) < 0.3) {
+          // Same logic: corner's front wall should align with standard's left wall
+          if (Math.abs(dot) < 0.3 && rot === 90) {
             isValidConnection = true;
             score = Math.abs(dot);
           }
@@ -1748,15 +1768,16 @@ export default function StableConfigurator() {
               
               if (c.id === "C" && targetConnCandidate.id === "B") {
                 // RH Corner C (front panel) connects to B (side)
-                // Connector vectors should be perpendicular
-                if (Math.abs(dot) < 0.3) {
+                // Corner's front wall should align with standard's right wall
+                // At rot=270: C moves to right side with normal (1,0) - matches B!
+                if (Math.abs(dot) < 0.3 && rot === 270) {
                   isValidConnection = true;
                   score = Math.abs(dot);
                 }
               } else if (c.id === "B" && targetConnCandidate.id === "C") {
                 // Standard B connects to RH Corner C (front panel)
-                // Connector vectors should be perpendicular
-                if (Math.abs(dot) < 0.3) {
+                // Same logic: corner's front wall should align with standard's right wall
+                if (Math.abs(dot) < 0.3 && rot === 270) {
                   isValidConnection = true;
                   score = Math.abs(dot);
                 }
@@ -1776,15 +1797,16 @@ export default function StableConfigurator() {
                 }
               } else if (c.id === "E" && targetConnCandidate.id === "A") {
                 // LH Corner E (front panel) connects to A (side)
-                // Connector vectors should be perpendicular
-                if (Math.abs(dot) < 0.3) {
+                // Corner's front wall should align with standard's left wall
+                // At rot=90: E moves to left side with normal (-1,0) - matches A!
+                if (Math.abs(dot) < 0.3 && rot === 90) {
                   isValidConnection = true;
                   score = Math.abs(dot);
                 }
               } else if (c.id === "A" && targetConnCandidate.id === "E") {
                 // Standard A connects to LH Corner E (front panel)
-                // Connector vectors should be perpendicular
-                if (Math.abs(dot) < 0.3) {
+                // Same logic: corner's front wall should align with standard's left wall
+                if (Math.abs(dot) < 0.3 && rot === 90) {
                   isValidConnection = true;
                   score = Math.abs(dot);
                 }
