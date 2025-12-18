@@ -894,9 +894,31 @@ export default function StableConfigurator() {
           );
           const v = rotateVec(c.nx, c.ny, rot);
           
-          // Calculate position
-          const x = aW.x - p.x;
-          const y = aW.y - p.y;
+          // Calculate base position (aligning connector points)
+          let x = aW.x - p.x;
+          let y = aW.y - p.y;
+          
+          // For front-to-side connections, adjust position so walls touch without overlapping
+          // When front wall aligns with side wall, offset by corner's width so walls touch
+          if ((c.id === "E" && targetConnCandidate.id === "A") || 
+              (c.id === "A" && targetConnCandidate.id === "E")) {
+            // E→A: Corner's front wall (becomes left wall at rot=90) should touch standard's left wall
+            // At rot=90, E is at left edge (x=0 relative to corner), A is at left edge (x=0 on standard)
+            // Align connectors first, then offset corner to the left by its width
+            if (rot === 90) {
+              const { w } = rotatedSize(newMod.widthFt, newMod.depthFt, rot);
+              x = aW.x - w; // Move corner left so its right edge touches standard's left edge
+            }
+          } else if ((c.id === "C" && targetConnCandidate.id === "B") ||
+                     (c.id === "B" && targetConnCandidate.id === "C")) {
+            // C→B: Corner's front wall (becomes right wall at rot=270) should touch standard's right wall
+            // At rot=270, C is at right edge, B is at right edge
+            // Align connectors first, then offset corner to the right
+            if (rot === 270) {
+              // x already positions corner's left edge at standard's right edge via connector alignment
+              // No additional offset needed - connector alignment already positions correctly
+            }
+          }
           
           // Calculate score based on connector alignment
           const dot = v.nx * aW.nx + v.ny * aW.ny;
@@ -1122,9 +1144,26 @@ export default function StableConfigurator() {
         const p = rotatePoint(c.x, c.y, unitMod.widthFt, unitMod.depthFt, rot);
         const v = rotateVec(c.nx, c.ny, rot);
         
-        // Calculate position
-        const x = aW.x - p.x;
-        const y = aW.y - p.y;
+        // Calculate base position (aligning connector points)
+        let x = aW.x - p.x;
+        let y = aW.y - p.y;
+        
+        // For front-to-side connections, adjust position so walls touch without overlapping
+        if ((c.id === "E" && targetConn === "A") || 
+            (c.id === "A" && targetConn === "E")) {
+          // E→A: Corner's front wall (becomes left wall at rot=90) should touch standard's left wall
+          if (rot === 90) {
+            const { w } = rotatedSize(unitMod.widthFt, unitMod.depthFt, rot);
+            x = aW.x - w; // Position corner's right edge at standard's left edge
+          }
+        } else if ((c.id === "C" && targetConn === "B") ||
+                   (c.id === "B" && targetConn === "C")) {
+          // C→B: Corner's front wall (becomes right wall at rot=270) should touch standard's right wall
+          if (rot === 270) {
+            const { w } = rotatedSize(unitMod.widthFt, unitMod.depthFt, rot);
+            x = aW.x; // Position corner's left edge at standard's right edge
+          }
+        }
         
         // Calculate score based on connector alignment
         const dot = v.nx * aW.nx + v.ny * aW.ny;
@@ -1741,9 +1780,26 @@ export default function StableConfigurator() {
               const p = rotatePoint(c.x, c.y, m.widthFt, m.depthFt, rot);
               const v = rotateVec(c.nx, c.ny, rot);
               
-              // Calculate position
-              const x = aW.x - p.x;
-              const y = aW.y - p.y;
+              // Calculate base position (aligning connector points)
+              let x = aW.x - p.x;
+              let y = aW.y - p.y;
+              
+              // For front-to-side connections, adjust position so walls touch without overlapping
+              if ((c.id === "E" && targetConnCandidate.id === "A") || 
+                  (c.id === "A" && targetConnCandidate.id === "E")) {
+                // E→A: Corner's front wall (becomes left wall at rot=90) should touch standard's left wall
+                if (rot === 90) {
+                  const { w } = rotatedSize(m.widthFt, m.depthFt, rot);
+                  x = aW.x - w; // Position corner's right edge at standard's left edge
+                }
+              } else if ((c.id === "C" && targetConnCandidate.id === "B") ||
+                         (c.id === "B" && targetConnCandidate.id === "C")) {
+                // C→B: Corner's front wall (becomes right wall at rot=270) should touch standard's right wall
+                if (rot === 270) {
+                  const { w } = rotatedSize(m.widthFt, m.depthFt, rot);
+                  x = aW.x; // Position corner's left edge at standard's right edge
+                }
+              }
               
               // Calculate score based on connector alignment
               const dot = v.nx * aW.nx + v.ny * aW.ny;
