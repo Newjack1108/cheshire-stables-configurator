@@ -718,6 +718,26 @@ export default function StableConfigurator() {
           
           const connWorld = connectorWorld(u, m, conn);
           
+          // Calculate what the final position would be (same logic as attach)
+          // Align connector points
+          const draggedConnLocal = rotatePoint(
+            draggedMod.connectors.find(c => c.id === draggedConn.connId)!.x,
+            draggedMod.connectors.find(c => c.id === draggedConn.connId)!.y,
+            draggedMod.widthFt,
+            draggedMod.depthFt,
+            rot
+          );
+          let finalX = connWorld.x - draggedConnLocal.x;
+          let finalY = connWorld.y - draggedConnLocal.y;
+          
+          // Check normal alignment
+          const draggedNormal = rotateVec(
+            draggedMod.connectors.find(c => c.id === draggedConn.connId)!.nx,
+            draggedMod.connectors.find(c => c.id === draggedConn.connId)!.ny,
+            rot
+          );
+          const dot = draggedNormal.nx * connWorld.nx + draggedNormal.ny * connWorld.ny;
+          
           // Check normal alignment for side-to-side connections
           const isSideToSide = 
             (draggedConn.connId === "F" && conn.id === "B") ||
@@ -727,14 +747,27 @@ export default function StableConfigurator() {
           
           if (isSideToSide) {
             // For side-to-side, normals must be opposite (pointing toward each other)
-            const dot = draggedConn.nx * connWorld.nx + draggedConn.ny * connWorld.ny;
             if (dot >= -0.7) {
               continue; // Skip - normals not opposite
             }
           }
           
-          const dx = connWorld.x - draggedConn.x;
-          const dy = connWorld.y - draggedConn.y;
+          // Apply offset to prevent overlap (same as attach logic)
+          const { w, d } = rotatedSize(draggedMod.widthFt, draggedMod.depthFt, rot);
+          if (Math.abs(draggedNormal.nx) > Math.abs(draggedNormal.ny)) {
+            finalX += draggedNormal.nx * w;
+          } else {
+            finalY += draggedNormal.ny * d;
+          }
+          
+          // Calculate distance between connector points at final position
+          const finalConnWorld = connectorWorld(
+            { uid: "temp", moduleId, xFt: finalX, yFt: finalY, rot, selectedExtras: [] },
+            draggedMod,
+            draggedMod.connectors.find(c => c.id === draggedConn.connId)!
+          );
+          const dx = connWorld.x - finalConnWorld.x;
+          const dy = connWorld.y - finalConnWorld.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
           
           // Strict snap: must be within 2ft (no tolerance)
