@@ -7,7 +7,7 @@
     "stable_14x12": 4400,
     "stable_16x12": 4800,
     "shelter_12x12": 3600,
-    "corner_16x12": 5200,
+    "corner_lh_16x12": 5200,
     "corner_rh_16x12": 5200,
     "tack_room_12x12": 4200
   },

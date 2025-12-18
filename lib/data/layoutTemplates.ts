@@ -32,8 +32,8 @@ export const DEFAULT_TEMPLATES: LayoutTemplate[] = [
       { uid: "stable2", moduleId: "stable_12x12", xFt: 0, yFt: 12, rot: 0, selectedExtras: [] },
     ],
     connections: [
-      { aUid: "corner1", aConn: "F", bUid: "stable1", bConn: "A" },
-      { aUid: "corner1", aConn: "E", bUid: "stable2", bConn: "A" },
+      { aUid: "corner1", aConn: "W", bUid: "stable1", bConn: "W" },
+      { aUid: "corner1", aConn: "S", bUid: "stable2", bConn: "W" },
     ],
   },
   {
@@ -46,8 +46,8 @@ export const DEFAULT_TEMPLATES: LayoutTemplate[] = [
       { uid: "row3", moduleId: "stable_12x12", xFt: 24, yFt: 0, rot: 0, selectedExtras: [] },
     ],
     connections: [
-      { aUid: "row1", aConn: "B", bUid: "row2", bConn: "A" },
-      { aUid: "row2", aConn: "B", bUid: "row3", bConn: "A" },
+      { aUid: "row1", aConn: "E", bUid: "row2", bConn: "W" },
+      { aUid: "row2", aConn: "E", bUid: "row3", bConn: "W" },
     ],
   },
   {
@@ -61,9 +61,9 @@ export const DEFAULT_TEMPLATES: LayoutTemplate[] = [
       { uid: "u3", moduleId: "stable_12x12", xFt: 12, yFt: 12, rot: 180, selectedExtras: [] },
     ],
     connections: [
-      { aUid: "u1", aConn: "B", bUid: "tack1", bConn: "A" },
-      { aUid: "tack1", aConn: "B", bUid: "u2", bConn: "A" },
-      { aUid: "tack1", aConn: "B", bUid: "u3", bConn: "A" },
+      { aUid: "u1", aConn: "E", bUid: "tack1", bConn: "W" },
+      { aUid: "tack1", aConn: "E", bUid: "u2", bConn: "W" },
+      { aUid: "tack1", aConn: "S", bUid: "u3", bConn: "N" },
     ],
   },
 ];

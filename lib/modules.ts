@@ -27,26 +27,17 @@ export function getPrice(moduleId: string, extraId?: string): number {
   return 0;
 }
 
-// Standard building connectors: A and B on opposite sides
+// Standard building connectors: W (West/Left) and E (East/Right) on opposite sides
 const makeStraightConnectors = (w: number, d: number) => [
-  { id: "A" as const, x: 0, y: d / 2, nx: -1, ny: 0 }, // Left side
-  { id: "B" as const, x: w, y: d / 2, nx: 1, ny: 0 }, // Right side
+  { id: "W" as const, x: 0, y: d / 2, nx: -1, ny: 0 }, // Left side (West)
+  { id: "E" as const, x: w, y: d / 2, nx: 1, ny: 0 }, // Right side (East)
 ];
 
-// RH Corner stable connectors:
-// C connector on front panel next to door (center of blank panel section)
-// D connector on side nearest door
-const makeRHCornerStableConnectors = (w: number, d: number) => [
-  { id: "C" as const, x: 6, y: d, nx: 0, ny: 1 }, // Front panel, center of 12ft blank section (6ft from left)
-  { id: "D" as const, x: w, y: d / 2, nx: 1, ny: 0 }, // Right side (nearest door)
-];
-
-// LH Corner stable connectors (mirror of RH):
-// E connector on front panel next to door (center of blank panel section)
-// F connector on side nearest door
-const makeLHCornerStableConnectors = (w: number, d: number) => [
-  { id: "E" as const, x: 10, y: d, nx: 0, ny: 1 }, // Front panel, center of 12ft blank section (10ft from left)
-  { id: "F" as const, x: 0, y: d / 2, nx: -1, ny: 0 }, // Left side (nearest door)
+// Corner connectors: W, E, N, S (all four sides)
+const makeCornerConnectors = (w: number, d: number) => [
+  ...makeStraightConnectors(w, d),
+  { id: "N" as const, x: w / 2, y: 0, nx: 0, ny: -1 }, // Top side (North)
+  { id: "S" as const, x: w / 2, y: d, nx: 0, ny: 1 }, // Bottom side (South)
 ];
 
 // Standard stable layout: 1ft blank + 4ft door + Xft blank + 2ft window + 1ft blank
@@ -235,7 +226,7 @@ export const MODULES: ModuleDef[] = [
     depthFt: 12,
     rotations: [0, 90, 180, 270],
     basePrice: 5200,
-    connectors: makeLHCornerStableConnectors(16, 12),
+    connectors: makeCornerConnectors(16, 12),
     frontFeatures: [
       // 4ft door on left (0-4ft)
       {
@@ -265,7 +256,7 @@ export const MODULES: ModuleDef[] = [
     depthFt: 12,
     rotations: [0, 90, 180, 270],
     basePrice: 5200,
-    connectors: makeRHCornerStableConnectors(16, 12),
+    connectors: makeCornerConnectors(16, 12),
     frontFeatures: [
       // 12ft blank panel on left (0-12ft) - connector is at center of this = 6ft from left
       { type: "panel", fromX: 0, toX: 12 },

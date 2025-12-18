@@ -884,46 +884,46 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
       const aDef = targetConnCandidate;
       const aW = connectorWorld(sourceUnit, aMod, aDef);
 
-      let best: {
-        rot: Rotation;
-        conn: ConnectorId;
-        x: number;
-        y: number;
-        score: number;
-      } | null = null;
+    let best: {
+      rot: Rotation;
+      conn: ConnectorId;
+      x: number;
+      y: number;
+      score: number;
+    } | null = null;
 
-      for (const rot of newMod.rotations) {
-        for (const c of newMod.connectors) {
+    for (const rot of newMod.rotations) {
+      for (const c of newMod.connectors) {
           // Check if these connectors can connect
           if (!canConnect(c.id, targetConnCandidate.id)) {
             continue;
           }
           
-          const p = rotatePoint(
-            c.x,
-            c.y,
-            newMod.widthFt,
-            newMod.depthFt,
-            rot
-          );
-          const v = rotateVec(c.nx, c.ny, rot);
+        const p = rotatePoint(
+          c.x,
+          c.y,
+          newMod.widthFt,
+          newMod.depthFt,
+          rot
+        );
+        const v = rotateVec(c.nx, c.ny, rot);
           
           // Calculate position to align connector points
           let x = aW.x - p.x;
           let y = aW.y - p.y;
           
           // Check if connector normals allow connection (must be opposite)
-          const dot = v.nx * aW.nx + v.ny * aW.ny;
+        const dot = v.nx * aW.nx + v.ny * aW.ny;
           const score = -dot; // Better score = more opposite normals
           
           // Position the new box so connectors align
           // No offset needed - connectors should align exactly
           
-          if (!best || score < best.score) {
-            best = { rot, conn: c.id, x, y, score };
-          }
+        if (!best || score < best.score) {
+          best = { rot, conn: c.id, x, y, score };
         }
       }
+    }
 
       // Keep track of the best match across all target connectors
       if (best && (!bestOverall || best.score < bestOverall.score)) {
@@ -1683,8 +1683,8 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
     const previewColor = isValid ? KELLY_GREEN : "#cc0000"; // Green if valid, red if invalid
 
     const frontFace = getFrontFace(previewRot);
-    
-    return (
+
+  return (
       <g
         transform={`translate(${previewX * FT_TO_PX}, ${previewY * FT_TO_PX})`}
         opacity={0.65}
@@ -1925,7 +1925,7 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
             }}>
               SC
             </div>
-            <div>
+      <div>
               <h1 style={{ 
                 margin: 0, 
                 fontSize: 28, 
@@ -2072,7 +2072,7 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
               }}
             >
               Save Current
-            </button>
+        </button>
             {selectedTemplateId && selectedTemplateId.startsWith("custom_") && (
               <button
                 onClick={() => {
@@ -2381,7 +2381,7 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
               + Add Shelter
             </button>
             <button
-              onClick={() => attach("corner_16x12", "E")}
+              onClick={() => attach("corner_lh_16x12", "E")}
               style={{
                 padding: "14px 20px",
                 backgroundColor: DARK_GREEN,
@@ -2416,7 +2416,7 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
               + Add LH Corner Stable
             </button>
             <button
-              onClick={() => attach("corner_16x12", "E")}
+              onClick={() => attach("corner_rh_16x12", "E")}
               style={{
                 padding: "14px 20px",
                 backgroundColor: DARK_GREEN,
@@ -2485,8 +2485,8 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
             >
               + Add Tack Room
             </button>
-          </div>
         </div>
+      </div>
 
         {selected && selectedModule && (
           <div style={{ 
@@ -2696,7 +2696,7 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
         </div>
         <svg
           ref={svgRef}
-          width="100%"
+        width="100%"
           height="600"
           viewBox={`${(ext.minX - 15) * FT_TO_PX / zoomLevel} ${(ext.minY - 15) * FT_TO_PX / zoomLevel} ${(ext.maxX - ext.minX + 30) * FT_TO_PX / zoomLevel} ${(ext.maxY - ext.minY + 30) * FT_TO_PX / zoomLevel}`}
           style={{ 
@@ -2755,29 +2755,29 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
             );
           })()}
 
-          {units.map((u) => {
-            const m = getModule(u.moduleId);
-            const { w, d } = rotatedSize(m.widthFt, m.depthFt, u.rot);
+        {units.map((u) => {
+          const m = getModule(u.moduleId);
+          const { w, d } = rotatedSize(m.widthFt, m.depthFt, u.rot);
             const isSelected = u.uid === selectedUid;
             const isBeingDragged = draggingUnitUid === u.uid;
             
             // Hide unit being dragged (preview will show instead)
             if (isBeingDragged) return null;
             
-            return (
-              <g
-                key={u.uid}
+          return (
+            <g
+              key={u.uid}
                 transform={`translate(${u.xFt * FT_TO_PX}, ${u.yFt * FT_TO_PX})`}
-                onClick={() => setSelectedUid(u.uid)}
+              onClick={() => setSelectedUid(u.uid)}
                 onMouseDown={(e) => handleUnitMouseDown(e, u)}
                 style={{ cursor: "grab" }}
-              >
+            >
                 {/* Main rectangle */}
-                <rect
-                  x={0}
-                  y={0}
-                  width={w * FT_TO_PX}
-                  height={d * FT_TO_PX}
+              <rect
+                x={0}
+                y={0}
+                width={w * FT_TO_PX}
+                height={d * FT_TO_PX}
                   fill={isSelected ? "#e6f2ff" : "#ffffff"}
                   stroke={isSelected ? "#0066cc" : "#333"}
                   strokeWidth={isSelected ? 3 : STROKE}
@@ -3023,8 +3023,8 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
                   fill={isSelected ? "#0066cc" : "#333"}
                   fontWeight={isSelected ? 600 : 400}
                 >
-                  {m.name}
-                </text>
+                {m.name}
+              </text>
                 
                 {/* Dimensions */}
                 <text
@@ -3088,10 +3088,10 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
                     </g>
                   );
                 })}
-              </g>
-            );
-          })}
-        </svg>
+            </g>
+          );
+        })}
+      </svg>
         {/* Delete and Rotate buttons at bottom of plan view */}
         {selected && (
           <div style={{
