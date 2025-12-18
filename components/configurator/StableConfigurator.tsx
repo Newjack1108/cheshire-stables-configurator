@@ -1,13 +1,11 @@
 "use client";
 
-import React, { useMemo, useState, useEffect, useRef } from "react";
+import React, { useMemo, useState, useRef } from "react";
 import { MODULES } from "@/lib/modules";
-import { getAllTemplates, getTemplate, saveTemplate, LayoutTemplate, deleteTemplate } from "@/lib/data/layoutTemplates";
 import {
   rotatedSize,
   rotatePoint,
   rotateVec,
-  overlaps,
 } from "@/lib/geometry";
 import {
   ModuleDef,
@@ -477,179 +475,12 @@ export default function StableConfigurator() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [selectedUid, setSelectedUid] = useState<string>(units[0].uid);
   
-  // Drag state
+  // Simple drag state
   const [draggingModuleId, setDraggingModuleId] = useState<string | null>(null);
-  const [draggingUnitUid, setDraggingUnitUid] = useState<string | null>(null);
   const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
   const [snappedConnector, setSnappedConnector] = useState<{ uid: string; connId: ConnectorId } | null>(null);
-  const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null);
-  
-  // Zoom state
-  const [zoomLevel, setZoomLevel] = useState(1); // 1.0 = 100%
-  
-  // Layout rotation state
-  const [layoutRotation, setLayoutRotation] = useState(0); // 0, 90, 180, 270
-  
-  // Template state
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
-  
-  // Pre-built designs state
-  const [preBuiltDesigns, setPreBuiltDesigns] = useState<any[]>([]);
-  const [selectedDesignId, setSelectedDesignId] = useState<string>("");
 
   const selected = units.find((u) => u.uid === selectedUid);
-
-  // Rotate entire layout
-  function rotateLayout() {
-    if (units.length === 0) return;
-    
-    // Calculate center point of all units (using their bounding boxes)
-    let centerX = 0;
-    let centerY = 0;
-    let totalWeight = 0;
-    for (const u of units) {
-      const m = getModule(u.moduleId);
-      const b = bbox(u, m);
-      const weight = b.w * b.d; // Weight by area
-      centerX += (b.x + b.w / 2) * weight;
-      centerY += (b.y + b.d / 2) * weight;
-      totalWeight += weight;
-    }
-    centerX /= totalWeight;
-    centerY /= totalWeight;
-    
-    // Rotate 90 degrees clockwise
-    const rotationRad = (90 * Math.PI) / 180;
-    const cos = Math.cos(rotationRad);
-    const sin = Math.sin(rotationRad);
-    
-    const rotatedUnits = units.map((u) => {
-      const m = getModule(u.moduleId);
-      const b = bbox(u, m);
-      const unitCenterX = b.x + b.w / 2;
-      const unitCenterY = b.y + b.d / 2;
-      
-      // Translate to origin, rotate, translate back
-      const dx = unitCenterX - centerX;
-      const dy = unitCenterY - centerY;
-      const newX = centerX + dx * cos - dy * sin;
-      const newY = centerY + dx * sin + dy * cos;
-      
-      // Calculate new position (top-left corner)
-      // Need to account for the fact that after rotation, width/height may swap
-      const newUnitRot = ((u.rot + 90) % 360) as Rotation;
-      const { w, d } = rotatedSize(m.widthFt, m.depthFt, newUnitRot);
-      
-      const newXFt = newX - w / 2;
-      const newYFt = newY - d / 2;
-      
-      return {
-        ...u,
-        xFt: newXFt,
-        yFt: newYFt,
-        rot: newUnitRot as Rotation,
-      };
-    });
-    
-    setUnits(rotatedUnits);
-    setLayoutRotation((layoutRotation + 90) % 360);
-  }
-
-  // Load template
-  function loadTemplate(templateId: string) {
-    const template = getTemplate(templateId);
-    if (!template) {
-      // Try loading from saved templates
-      const savedTemplates = getAllTemplates();
-      const savedTemplate = savedTemplates.find((t) => t.id === templateId);
-      if (!savedTemplate) return;
-      
-      // Generate new UIDs for units and update connections
-      const uidMap = new Map<string, string>();
-      const newUnits = savedTemplate.units.map((u) => {
-        const newUid = uid();
-        uidMap.set(u.uid, newUid);
-        return { ...u, uid: newUid };
-      });
-      
-      const newConnections = savedTemplate.connections.map((c) => ({
-        aUid: uidMap.get(c.aUid) || c.aUid,
-        aConn: c.aConn,
-        bUid: uidMap.get(c.bUid) || c.bUid,
-        bConn: c.bConn,
-      }));
-      
-      setUnits(newUnits);
-      setConnections(newConnections);
-      if (newUnits.length > 0) {
-        setSelectedUid(newUnits[0].uid);
-      }
-      setSelectedTemplateId(templateId);
-      return;
-    }
-    
-    // Generate new UIDs for units and update connections
-    const uidMap = new Map<string, string>();
-    const newUnits = template.units.map((u) => {
-      const newUid = uid();
-      uidMap.set(u.uid, newUid);
-      return { ...u, uid: newUid };
-    });
-    
-    const newConnections = template.connections.map((c) => ({
-      aUid: uidMap.get(c.aUid) || c.aUid,
-      aConn: c.aConn,
-      bUid: uidMap.get(c.bUid) || c.bUid,
-      bConn: c.bConn,
-    }));
-    
-    setUnits(newUnits);
-    setConnections(newConnections);
-    if (newUnits.length > 0) {
-      setSelectedUid(newUnits[0].uid);
-    }
-    setSelectedTemplateId(templateId);
-  }
-
-  // Load pre-built design
-  function loadDesign(designId: string) {
-    const design = preBuiltDesigns.find((d) => d.id === designId);
-    if (!design) return;
-    
-    // Generate new UIDs for units and update connections
-    const uidMap = new Map<string, string>();
-    const newUnits = design.units.map((u: PlacedUnit) => {
-      const newUid = uid();
-      uidMap.set(u.uid, newUid);
-      return { ...u, uid: newUid };
-    });
-    
-    const newConnections = design.connections.map((c: Connection) => ({
-      aUid: uidMap.get(c.aUid) || c.aUid,
-      aConn: c.aConn,
-      bUid: uidMap.get(c.bUid) || c.bUid,
-      bConn: c.bConn,
-    }));
-    
-    setUnits(newUnits);
-    setConnections(newConnections);
-    if (newUnits.length > 0) {
-      setSelectedUid(newUnits[0].uid);
-    }
-    setSelectedDesignId(designId);
-  }
-
-  // Load pre-built designs from localStorage
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("stable_configurator_designs");
-      if (saved) {
-        setPreBuiltDesigns(JSON.parse(saved));
-      }
-    } catch {
-      // Ignore
-    }
-  }, []);
 
   function isUsed(uid: string, conn: ConnectorId) {
     return connections.some(
@@ -668,134 +499,8 @@ export default function StableConfigurator() {
     return { x: svgPt.x / FT_TO_PX, y: svgPt.y / FT_TO_PX };
   }
 
-  // Find nearest available connector within snap distance
-  // Checks if any connector of the dragged module (at position x, y, rot) is near any available connector
-  // Also verifies that the connecting walls are parallel for corner connections
-  // excludeUid: optional UID to exclude from search (useful when dragging existing unit)
-  function findNearestConnector(
-    moduleId: string,
-    x: number,
-    y: number,
-    rot: Rotation,
-    excludeUid?: string
-  ): { uid: string; connId: ConnectorId; distance: number } | null {
-    let nearest: { uid: string; connId: ConnectorId; distance: number } | null = null;
-    const snapDistFt = SNAP_DISTANCE;
-    
-    const draggedMod = getModule(moduleId);
-    
-    // Get all connector positions and rotated normals for the dragged module at this position/rotation
-    const draggedConnectors: Array<{ x: number; y: number; connId: ConnectorId; nx: number; ny: number }> = [];
-    for (const conn of draggedMod.connectors) {
-      const connWorld = connectorWorld(
-        { uid: "temp", moduleId, xFt: x, yFt: y, rot, selectedExtras: [] },
-        draggedMod,
-        conn
-      );
-      draggedConnectors.push({ 
-        x: connWorld.x, 
-        y: connWorld.y, 
-        connId: conn.id,
-        nx: connWorld.nx,
-        ny: connWorld.ny
-      });
-    }
-
-    // Check each dragged connector against all available connectors on other units
-    for (const draggedConn of draggedConnectors) {
-      for (const u of units) {
-        // Skip the unit being dragged
-        if (excludeUid && u.uid === excludeUid) continue;
-        
-        const m = getModule(u.moduleId);
-        for (const conn of m.connectors) {
-          if (isUsed(u.uid, conn.id)) continue;
-          
-          // Check if these connectors can actually connect
-          if (!canConnect(draggedConn.connId, conn.id)) {
-            continue;
-          }
-          
-          const connWorld = connectorWorld(u, m, conn);
-          
-          // Calculate what the final position would be (same logic as attach)
-          // Align connector points
-          const draggedConnLocal = rotatePoint(
-            draggedMod.connectors.find(c => c.id === draggedConn.connId)!.x,
-            draggedMod.connectors.find(c => c.id === draggedConn.connId)!.y,
-            draggedMod.widthFt,
-            draggedMod.depthFt,
-            rot
-          );
-          let finalX = connWorld.x - draggedConnLocal.x;
-          let finalY = connWorld.y - draggedConnLocal.y;
-          
-          // Check normal alignment
-          const draggedNormal = rotateVec(
-            draggedMod.connectors.find(c => c.id === draggedConn.connId)!.nx,
-            draggedMod.connectors.find(c => c.id === draggedConn.connId)!.ny,
-            rot
-          );
-          const dot = draggedNormal.nx * connWorld.nx + draggedNormal.ny * connWorld.ny;
-          
-          // Check normal alignment for side-to-side connections
-          const isSideToSide = 
-            (draggedConn.connId === "E" && conn.id === "W") ||
-            (draggedConn.connId === "W" && conn.id === "E") ||
-            (draggedConn.connId === "N" && conn.id === "S") ||
-            (draggedConn.connId === "S" && conn.id === "N");
-          
-          if (isSideToSide) {
-            // For side-to-side, normals must be opposite (pointing toward each other)
-            if (dot >= -0.7) {
-              continue; // Skip - normals not opposite
-            }
-          }
-          
-          // Apply offset to prevent overlap (same as attach logic)
-          const { w, d } = rotatedSize(draggedMod.widthFt, draggedMod.depthFt, rot);
-          if (Math.abs(draggedNormal.nx) > Math.abs(draggedNormal.ny)) {
-            finalX += draggedNormal.nx * w;
-          } else {
-            finalY += draggedNormal.ny * d;
-          }
-          
-          // Calculate distance between connector points at final position
-          const finalConnWorld = connectorWorld(
-            { uid: "temp", moduleId, xFt: finalX, yFt: finalY, rot, selectedExtras: [] },
-            draggedMod,
-            draggedMod.connectors.find(c => c.id === draggedConn.connId)!
-          );
-          const dx = connWorld.x - finalConnWorld.x;
-          const dy = connWorld.y - finalConnWorld.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          
-          // Strict snap: must be within 2ft (no tolerance)
-          if (dist < snapDistFt && (!nearest || dist < nearest.distance)) {
-            nearest = { uid: u.uid, connId: conn.id, distance: dist };
-          }
-        }
-      }
-    }
-
-    return nearest;
-  }
-
-  // Check if a module position is valid (no overlaps)
-  // excludeUid: optional UID to exclude from overlap check (useful when dragging existing unit)
-  // Check if two connectors can connect based on building types
-  // Standard boxes: A and B
-  // RH Corner boxes: C connects to B, D connects to A
-  // LH Corner boxes: E connects to A, F connects to B
-  // Simple connector compatibility rules (all bidirectional):
-  // A ↔ B, E, D
-  // B ↔ A, F, C
-  // C ↔ B
-  // D ↔ A, F
-  // E ↔ A
-  // F ↔ B, D
+  // Simple function to check if two connectors can connect
   function canConnect(sourceConn: ConnectorId, targetConn: ConnectorId): boolean {
-    // W/E/N/S connectors can connect to opposite sides
     return (
       (sourceConn === "W" && targetConn === "E") ||
       (sourceConn === "E" && targetConn === "W") ||
@@ -804,170 +509,121 @@ export default function StableConfigurator() {
     );
   }
 
-  // Calculate if front should face inward when connecting standard to corner
-  function shouldFaceInward(
-    standardUnit: PlacedUnit,
-    standardMod: ModuleDef,
-    cornerUnit: PlacedUnit,
-    cornerMod: ModuleDef,
-    standardConn: ConnectorId,
-    cornerConn: ConnectorId
-  ): { targetFrontFace: "N" | "E" | "S" | "W" } | null {
-    if (standardMod.kind === "corner" || cornerMod.kind !== "corner") return null;
-    
-    // Calculate direction from standard's connector position to corner's center
-    const standardConnWorld = connectorWorld(standardUnit, standardMod, 
-      standardMod.connectors.find(c => c.id === standardConn)!);
-    const cornerCenter = {
-      x: cornerUnit.xFt + cornerMod.widthFt / 2,
-      y: cornerUnit.yFt + cornerMod.depthFt / 2
-    };
-    
-    const dx = cornerCenter.x - standardConnWorld.x;
-    const dy = cornerCenter.y - standardConnWorld.y;
-    
-    // Determine which direction the front should face
-    if (Math.abs(dx) > Math.abs(dy)) {
-      return { targetFrontFace: dx > 0 ? "E" : "W" };
-    } else {
-      return { targetFrontFace: dy > 0 ? "S" : "N" };
-    }
+  // Simple overlap check
+  function hasOverlap(box1: { x: number; y: number; w: number; d: number }, box2: { x: number; y: number; w: number; d: number }): boolean {
+    const tolerance = 0.5; // Allow boxes to touch
+    return !(
+      box1.x + box1.w <= box2.x + tolerance ||
+      box2.x + box2.w <= box1.x + tolerance ||
+      box1.y + box1.d <= box2.y + tolerance ||
+      box2.y + box2.d <= box1.y + tolerance
+    );
   }
 
-  function isValidPosition(moduleId: string, x: number, y: number, rot: Rotation, excludeUid?: string): boolean {
-    const m = getModule(moduleId);
-    const testUnit: PlacedUnit = {
-      uid: "test",
-      moduleId,
-      xFt: x,
-      yFt: y,
-      rot,
-      selectedExtras: [],
-    };
-    const bNew = bbox(testUnit, m);
-
-    // Check for overlaps with existing units
-    for (const u of units) {
-      // Skip the unit being dragged (excludeUid)
-      if (excludeUid && u.uid === excludeUid) continue;
+  // Find nearest connector for drag-and-drop
+  function findNearestConnector(
+    moduleId: string,
+    x: number,
+    y: number,
+    rot: Rotation
+  ): { uid: string; connId: ConnectorId; distance: number } | null {
+    const draggedMod = getModule(moduleId);
+    let nearest: { uid: string; connId: ConnectorId; distance: number } | null = null;
+    const snapDistFt = 3; // 3ft snap distance
+    
+    // Get dragged module's connector positions
+    for (const draggedConn of draggedMod.connectors) {
+      const draggedConnWorld = connectorWorld(
+        { uid: "temp", moduleId, xFt: x, yFt: y, rot, selectedExtras: [] },
+        draggedMod,
+        draggedConn
+      );
       
-      const bExisting = bbox(u, getModule(u.moduleId));
-      if (overlaps(bNew, bExisting)) {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
-function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUnit) {
-    const sourceUnit = targetUnit || selected;
-    if (!sourceUnit) {
-      console.log("No source unit selected");
-      return;
-    }
-
-    const aMod = getModule(sourceUnit.moduleId);
-    const newMod = getModule(moduleId);
-
-    // Try the specified connector first, then others if it doesn't work
-    const connectorsToTry = [
-      aMod.connectors.find(c => c.id === targetConn),
-      ...aMod.connectors.filter(c => c.id !== targetConn)
-    ].filter(Boolean) as typeof aMod.connectors;
-
-    let bestOverall: {
-      rot: Rotation;
-      conn: ConnectorId;
-      targetConn: ConnectorId;
-      x: number;
-      y: number;
-      score: number;
-    } | null = null;
-
-    for (const targetConnCandidate of connectorsToTry) {
-      if (!targetConnCandidate) continue;
-      if (isUsed(sourceUnit.uid, targetConnCandidate.id)) continue;
-
-      const aDef = targetConnCandidate;
-      const aW = connectorWorld(sourceUnit, aMod, aDef);
-
-    let best: {
-      rot: Rotation;
-      conn: ConnectorId;
-      x: number;
-      y: number;
-      score: number;
-    } | null = null;
-
-      for (const rot of newMod.rotations) {
-        for (const c of newMod.connectors) {
-          // Check if these connectors can connect
-          if (!canConnect(c.id, targetConnCandidate.id)) {
-            continue;
-          }
+      // Check against all units
+      for (const u of units) {
+        const m = getModule(u.moduleId);
+        for (const conn of m.connectors) {
+          if (isUsed(u.uid, conn.id)) continue;
+          if (!canConnect(draggedConn.id, conn.id)) continue;
           
-          const p = rotatePoint(
-            c.x,
-            c.y,
-            newMod.widthFt,
-            newMod.depthFt,
-            rot
-          );
-          const v = rotateVec(c.nx, c.ny, rot);
+          const connWorld = connectorWorld(u, m, conn);
+          const dx = draggedConnWorld.x - connWorld.x;
+          const dy = draggedConnWorld.y - connWorld.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
           
-          // Calculate position to align connector points
-          let x = aW.x - p.x;
-          let y = aW.y - p.y;
-          
-          // Check if connector normals allow connection (must be opposite)
-          const dot = v.nx * aW.nx + v.ny * aW.ny;
-          
-          // For connectors to connect, normals must point toward each other (dot product should be negative)
-          // Allow some tolerance for floating point precision
-          if (dot > -0.3) {
-            continue; // Skip if normals aren't opposite enough
-          }
-          
-          // Offset the new box so it sits next to the existing box, not overlapping
-          // The connector position p is relative to the box's top-left corner
-          // After aligning connector points, we need to offset by the box dimension
-          // in the direction the connector normal points
-          const { w, d } = rotatedSize(newMod.widthFt, newMod.depthFt, rot);
-          
-          // Offset in the direction of the connector normal
-          // This moves the box so its edge touches the existing box's edge
-          if (Math.abs(v.nx) > Math.abs(v.ny)) {
-            // Horizontal connector: offset by width in the direction of normal
-            x += v.nx * w;
-          } else {
-            // Vertical connector: offset by depth in the direction of normal
-            y += v.ny * d;
-          }
-          
-          const score = -dot; // Better score = more opposite normals (closer to -1)
-          
-          if (!best || score < best.score) {
-            best = { rot, conn: c.id, x, y, score };
+          if (dist < snapDistFt && (!nearest || dist < nearest.distance)) {
+            nearest = { uid: u.uid, connId: conn.id, distance: dist };
           }
         }
       }
+    }
+    
+    return nearest;
+  }
 
-      // Keep track of the best match across all target connectors
-      if (best && (!bestOverall || best.score < bestOverall.score)) {
-        bestOverall = {
-          ...best,
-          targetConn: targetConnCandidate.id,
-        };
+  // Simple attach function - finds best available connector and attaches new module
+  function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUnit) {
+    const sourceUnit = targetUnit || selected;
+    if (!sourceUnit) return;
+
+    const sourceMod = getModule(sourceUnit.moduleId);
+    const newMod = getModule(moduleId);
+
+    // Find first available connector on source unit
+    let targetConnDef = sourceMod.connectors.find(c => c.id === targetConn && !isUsed(sourceUnit.uid, c.id));
+    if (!targetConnDef) {
+      // Try any available connector
+      targetConnDef = sourceMod.connectors.find(c => !isUsed(sourceUnit.uid, c.id));
+      if (!targetConnDef) return;
+    }
+
+    const targetWorld = connectorWorld(sourceUnit, sourceMod, targetConnDef);
+
+    // Try all rotations and connectors of new module
+    let best: { rot: Rotation; conn: ConnectorId; x: number; y: number } | null = null;
+
+    for (const rot of newMod.rotations) {
+      for (const newConn of newMod.connectors) {
+        if (!canConnect(newConn.id, targetConnDef.id)) continue;
+
+        const p = rotatePoint(newConn.x, newConn.y, newMod.widthFt, newMod.depthFt, rot);
+        const v = rotateVec(newConn.nx, newConn.ny, rot);
+
+        // Align connector points
+        let x = targetWorld.x - p.x;
+        let y = targetWorld.y - p.y;
+
+        // Offset to prevent overlap
+        const { w, d } = rotatedSize(newMod.widthFt, newMod.depthFt, rot);
+        if (Math.abs(v.nx) > Math.abs(v.ny)) {
+          x += v.nx * w;
+        } else {
+          y += v.ny * d;
+        }
+
+        // Check for overlap
+        const testUnit: PlacedUnit = { uid: "test", moduleId, xFt: x, yFt: y, rot, selectedExtras: [] };
+        const bNew = bbox(testUnit, newMod);
+        let overlaps = false;
+        for (const u of units) {
+          const bExisting = bbox(u, getModule(u.moduleId));
+          if (hasOverlap(bNew, bExisting)) {
+            overlaps = true;
+            break;
+          }
+        }
+        
+        if (overlaps) continue;
+
+        if (!hasOverlap) {
+          best = { rot, conn: newConn.id, x, y };
+          break; // Use first valid match
+        }
       }
+      if (best) break;
     }
 
-    if (!bestOverall) {
-      console.log("No valid connection found for", moduleId, "to", sourceUnit.moduleId);
-      return;
-    }
-    const best = bestOverall;
-    console.log("Found connection:", { moduleId, targetConn: best.targetConn, newConn: best.conn, position: { x: best.x, y: best.y, rot: best.rot } });
+    if (!best) return;
 
     const newUnit: PlacedUnit = {
       uid: uid(),
@@ -978,29 +634,12 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
       selectedExtras: [],
     };
 
-    const bNew = bbox(newUnit, newMod);
-    
-    // Check for overlaps - very lenient since boxes attached via connectors should be positioned correctly
-    for (const u of units) {
-      const bExisting = bbox(u, getModule(u.moduleId));
-      
-      // Only flag as overlap if there's significant interior overlap (more than 1ft)
-      // This allows boxes that are touching or very close
-      const overlapX = Math.min(bNew.x + bNew.w, bExisting.x + bExisting.w) - Math.max(bNew.x, bExisting.x);
-      const overlapY = Math.min(bNew.y + bNew.d, bExisting.y + bExisting.d) - Math.max(bNew.y, bExisting.y);
-      
-      // Only flag if there's meaningful interior overlap (more than 1ft in both dimensions)
-      if (overlapX > 1.0 && overlapY > 1.0) {
-        return alert("Overlap");
-      }
-    }
-
     setUnits([...units, newUnit]);
     setConnections([
       ...connections,
       {
         aUid: sourceUnit.uid,
-        aConn: best.targetConn,
+        aConn: targetConnDef.id,
         bUid: newUnit.uid,
         bConn: best.conn,
       },
@@ -1008,16 +647,19 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
     setSelectedUid(newUnit.uid);
   }
 
-  // Place module in free space (not connected)
+  // Place module in free space
   function placeModuleFree(moduleId: string, x: number, y: number): void {
     const m = getModule(moduleId);
-    // Center the module on the mouse cursor for better UX
     const centeredX = x - m.widthFt / 2;
     const centeredY = y - m.depthFt / 2;
-    
-    // Check if position is valid
-    if (!isValidPosition(moduleId, centeredX, centeredY, 0)) {
-      return; // Don't place if invalid
+
+    const testUnit: PlacedUnit = { uid: "test", moduleId, xFt: centeredX, yFt: centeredY, rot: 0, selectedExtras: [] };
+    const bNew = bbox(testUnit, m);
+    for (const u of units) {
+      const bExisting = bbox(u, getModule(u.moduleId));
+      if (hasOverlap(bNew, bExisting)) {
+        return; // Don't place if overlaps
+      }
     }
 
     const newUnit: PlacedUnit = {
@@ -1031,132 +673,6 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
 
     setUnits([...units, newUnit]);
     setSelectedUid(newUnit.uid);
-  }
-
-  // Connect existing unit to a connector
-  function connectExistingUnit(unitUid: string, targetConn: ConnectorId, targetUnitUid: string): void {
-    const unit = units.find((u) => u.uid === unitUid);
-    const targetUnit = units.find((u) => u.uid === targetUnitUid);
-    if (!unit || !targetUnit) return;
-
-    const targetMod = getModule(targetUnit.moduleId);
-    const targetConnDef = targetMod.connectors.find((c) => c.id === targetConn);
-    if (!targetConnDef) return;
-
-    if (isUsed(targetUnit.uid, targetConn)) return;
-
-    const aW = connectorWorld(targetUnit, targetMod, targetConnDef);
-    const unitMod = getModule(unit.moduleId);
-
-    // Find best rotation and connector match
-    let best: {
-      rot: Rotation;
-      conn: ConnectorId;
-      x: number;
-      y: number;
-      score: number;
-    } | null = null;
-
-    for (const rot of unitMod.rotations) {
-      for (const c of unitMod.connectors) {
-        // Skip if this connector is already used (unless it's the same connection we're replacing)
-        if (isUsed(unitUid, c.id)) {
-          // Check if it's the connection we're about to replace
-          const existingConn = connections.find(
-            (conn) => (conn.aUid === unitUid && conn.aConn === c.id) || (conn.bUid === unitUid && conn.bConn === c.id)
-          );
-          // If it's connected to a different unit, skip it
-          if (existingConn && existingConn.aUid !== targetUnitUid && existingConn.bUid !== targetUnitUid) {
-            continue;
-          }
-        }
-        
-        // Check if these connectors can connect
-        if (!canConnect(c.id, targetConn)) {
-          continue;
-        }
-        
-        const p = rotatePoint(c.x, c.y, unitMod.widthFt, unitMod.depthFt, rot);
-        const v = rotateVec(c.nx, c.ny, rot);
-        
-        // Calculate position to align connector points
-        let x = aW.x - p.x;
-        let y = aW.y - p.y;
-        
-        // Check connector normal alignment
-        const dot = v.nx * aW.nx + v.ny * aW.ny;
-        
-        // For side-to-side connections (A↔D, B↔F), normals must be opposite
-        const isSideToSide = 
-          (c.id === "E" && targetConn === "W") ||
-          (c.id === "W" && targetConn === "E") ||
-          (c.id === "N" && targetConn === "S") ||
-          (c.id === "S" && targetConn === "N");
-        
-        if (isSideToSide) {
-          // Side-to-side: normals must be opposite (pointing toward each other)
-          if (dot >= -0.7) {
-            continue; // Skip this rotation - normals not opposite
-          }
-        }
-        
-        // Offset to prevent overlap: move source module away by its dimension in direction of source normal
-        // This works for both side-to-side and front-to-side connections
-        const { w, d } = rotatedSize(unitMod.widthFt, unitMod.depthFt, rot);
-        if (Math.abs(v.nx) > Math.abs(v.ny)) {
-          // Horizontal connector: offset by width
-          x += v.nx * w;
-        } else {
-          // Vertical connector: offset by depth
-          y += v.ny * d;
-        }
-        
-        // Calculate distance between connector points after positioning
-        const connDist = Math.sqrt((x + p.x - aW.x) ** 2 + (y + p.y - aW.y) ** 2);
-        
-        // Accept if connectors are close enough (within tolerance)
-        // Closer distance = better connection
-        if (connDist < 0.1) {
-          const score = connDist; // Closer to 0 = better
-          
-          if (!best || score < best.score) {
-            best = { rot, conn: c.id, x, y, score };
-          }
-        }
-      }
-    }
-
-    if (!best) return;
-
-    // Check if the new position is valid (excluding the unit being moved)
-    if (!isValidPosition(unit.moduleId, best.x, best.y, best.rot, unitUid)) {
-      return;
-    }
-
-    // Update the unit's position and rotation
-    const updatedUnit: PlacedUnit = {
-      ...unit,
-      xFt: best.x,
-      yFt: best.y,
-      rot: best.rot,
-    };
-
-    // Remove any existing connections for this unit
-    const filteredConnections = connections.filter(
-      (c) => c.aUid !== unitUid && c.bUid !== unitUid
-    );
-
-    // Add new connection
-    const newConnection: Connection = {
-      aUid: targetUnit.uid,
-      aConn: targetConn,
-      bUid: unitUid,
-      bConn: best.conn,
-    };
-
-    setUnits(units.map((u) => (u.uid === unitUid ? updatedUnit : u)));
-    setConnections([...filteredConnections, newConnection]);
-    setSelectedUid(unitUid);
   }
 
   function rotateSelected() {
@@ -1175,7 +691,7 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
       const u2 = { ...selected, rot: next };
       const b2 = bbox(u2, m);
       for (const u of units) {
-        if (u.uid !== u2.uid && overlaps(b2, bbox(u, getModule(u.moduleId))))
+        if (u.uid !== u2.uid && hasOverlap(b2, bbox(u, getModule(u.moduleId))))
           return alert("Overlap");
       }
       setUnits(units.map((u) => (u.uid === u2.uid ? u2 : u)));
@@ -1211,7 +727,7 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
 
     const bSnap = bbox(snapped, m);
     for (const u of units) {
-      if (u.uid !== snapped.uid && overlaps(bSnap, bbox(u, getModule(u.moduleId))))
+      if (u.uid !== snapped.uid && hasOverlap(bSnap, bbox(u, getModule(u.moduleId))))
         return alert("Overlap");
     }
 
@@ -1247,144 +763,74 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
     }
   }
 
-  // Drag handlers
-  function handleDragStart(moduleId: string) {
-    setDraggingModuleId(moduleId);
-  }
-
+  // Simple drag handlers - only for dragging new modules from buttons
   function handleButtonMouseDown(moduleId: string) {
     setDraggingModuleId(moduleId);
   }
 
   function handleMouseMove(e: React.MouseEvent<SVGSVGElement>) {
-    if (!draggingModuleId && !draggingUnitUid) return;
+    if (!draggingModuleId) return;
     
     const svg = e.currentTarget;
     const worldPos = screenToWorld(svg, e.clientX, e.clientY);
     setDragPosition(worldPos);
 
-    if (draggingModuleId) {
-      // Find nearest connector for snapping
-      // Center the module on the mouse cursor for checking
-      // Try all rotations to find the best snap
-      const m = getModule(draggingModuleId);
-      const centeredX = worldPos.x - m.widthFt / 2;
-      const centeredY = worldPos.y - m.depthFt / 2;
-      
-      let bestNearest: { uid: string; connId: ConnectorId; distance: number } | null = null;
-      for (const rot of m.rotations) {
-        const nearest = findNearestConnector(draggingModuleId, centeredX, centeredY, rot);
-        if (nearest && (!bestNearest || nearest.distance < bestNearest.distance)) {
-          bestNearest = nearest;
-        }
-      }
-      
-      setSnappedConnector(bestNearest ? { uid: bestNearest.uid, connId: bestNearest.connId } : null);
-    } else if (draggingUnitUid && dragOffset) {
-      // For repositioning existing unit, check for connectors
-      // Use the unit's new position to find nearest connector (exclude the dragged unit)
-      const unit = units.find((u) => u.uid === draggingUnitUid);
-      if (unit) {
-        const newX = worldPos.x - dragOffset.x;
-        const newY = worldPos.y - dragOffset.y;
-        const nearest = findNearestConnector(unit.moduleId, newX, newY, unit.rot, draggingUnitUid);
-        setSnappedConnector(nearest ? { uid: nearest.uid, connId: nearest.connId } : null);
+    // Find nearest connector for snapping
+    const m = getModule(draggingModuleId);
+    const centeredX = worldPos.x - m.widthFt / 2;
+    const centeredY = worldPos.y - m.depthFt / 2;
+    
+    let bestNearest: { uid: string; connId: ConnectorId; distance: number } | null = null;
+    for (const rot of m.rotations) {
+      const nearest = findNearestConnector(draggingModuleId, centeredX, centeredY, rot);
+      if (nearest && (!bestNearest || nearest.distance < bestNearest.distance)) {
+        bestNearest = nearest;
       }
     }
+    
+    setSnappedConnector(bestNearest ? { uid: bestNearest.uid, connId: bestNearest.connId } : null);
   }
 
   function handleMouseUp(e: React.MouseEvent<SVGSVGElement>) {
-    if (draggingModuleId) {
-      const svg = e.currentTarget;
-      const worldPos = screenToWorld(svg, e.clientX, e.clientY);
-      
-      // Check for nearest connector at release position
-      // Center the module on the mouse cursor for checking
-      // Try all rotations to find the best snap
-      const m = getModule(draggingModuleId);
-      const centeredX = worldPos.x - m.widthFt / 2;
-      const centeredY = worldPos.y - m.depthFt / 2;
-      
-      let bestNearest: { uid: string; connId: ConnectorId; distance: number } | null = null;
-      for (const rot of m.rotations) {
-        const nearest = findNearestConnector(draggingModuleId, centeredX, centeredY, rot);
-        if (nearest && (!bestNearest || nearest.distance < bestNearest.distance)) {
-          bestNearest = nearest;
-        }
+    if (!draggingModuleId) return;
+    
+    const svg = e.currentTarget;
+    const worldPos = screenToWorld(svg, e.clientX, e.clientY);
+    
+    // Check for nearest connector at release position
+    const m = getModule(draggingModuleId);
+    const centeredX = worldPos.x - m.widthFt / 2;
+    const centeredY = worldPos.y - m.depthFt / 2;
+    
+    let bestNearest: { uid: string; connId: ConnectorId; distance: number } | null = null;
+    for (const rot of m.rotations) {
+      const nearest = findNearestConnector(draggingModuleId, centeredX, centeredY, rot);
+      if (nearest && (!bestNearest || nearest.distance < bestNearest.distance)) {
+        bestNearest = nearest;
       }
-      
-      const releaseSnappedConnector = bestNearest ? { uid: bestNearest.uid, connId: bestNearest.connId } : null;
-      
-      if (releaseSnappedConnector) {
-        // Attach to connector
-        const targetUnit = units.find((u) => u.uid === releaseSnappedConnector.uid);
-        if (targetUnit) {
-          attach(draggingModuleId, releaseSnappedConnector.connId, targetUnit);
-        }
-      } else {
-        // Place in free space if position is valid
-        placeModuleFree(draggingModuleId, worldPos.x, worldPos.y);
-      }
-      
-      setDraggingModuleId(null);
-      setDragPosition(null);
-      setSnappedConnector(null);
-    } else if (draggingUnitUid && dragOffset) {
-      // Reposition existing unit
-      const svg = e.currentTarget;
-      const worldPos = screenToWorld(svg, e.clientX, e.clientY);
-      
-      if (snappedConnector) {
-        // Connect to connector
-        connectExistingUnit(draggingUnitUid, snappedConnector.connId, snappedConnector.uid);
-      } else {
-        // Place in free space
-        const newX = worldPos.x - dragOffset.x;
-        const newY = worldPos.y - dragOffset.y;
-        
-        const unit = units.find((u) => u.uid === draggingUnitUid);
-        if (unit) {
-          const m = getModule(unit.moduleId);
-          
-          // Check if position is valid (excluding the dragged unit)
-          if (isValidPosition(unit.moduleId, newX, newY, unit.rot, draggingUnitUid)) {
-            const newUnit: PlacedUnit = { ...unit, xFt: newX, yFt: newY };
-            
-            // Remove any existing connections when moving to free space
-            const filteredConnections = connections.filter(
-              (c) => c.aUid !== draggingUnitUid && c.bUid !== draggingUnitUid
-            );
-            
-            setUnits(units.map((u) => (u.uid === draggingUnitUid ? newUnit : u)));
-            setConnections(filteredConnections);
-          }
-        }
-      }
-      
-      setDraggingUnitUid(null);
-      setDragPosition(null);
-      setDragOffset(null);
-      setSnappedConnector(null);
     }
+    
+    if (bestNearest) {
+      // Attach to connector
+      const targetUnit = units.find((u) => u.uid === bestNearest!.uid);
+      if (targetUnit) {
+        attach(draggingModuleId, bestNearest.connId, targetUnit);
+      }
+    } else {
+      // Place in free space
+      placeModuleFree(draggingModuleId, worldPos.x, worldPos.y);
+    }
+    
+    setDraggingModuleId(null);
+    setDragPosition(null);
+    setSnappedConnector(null);
   }
 
   function handleMouseLeave() {
     // Cancel drag if mouse leaves SVG
     setDraggingModuleId(null);
-    setDraggingUnitUid(null);
     setDragPosition(null);
     setSnappedConnector(null);
-    setDragOffset(null);
-  }
-
-  function handleUnitMouseDown(e: React.MouseEvent<SVGGElement>, unit: PlacedUnit) {
-    e.stopPropagation();
-    const svg = e.currentTarget.ownerSVGElement!;
-    const worldPos = screenToWorld(svg, e.clientX, e.clientY);
-    setDraggingUnitUid(unit.uid);
-    setDragOffset({ x: worldPos.x - unit.xFt, y: worldPos.y - unit.yFt });
-    setDragPosition(worldPos);
-    setSelectedUid(unit.uid);
   }
 
   const totalCost = useMemo(() => {
@@ -1445,481 +891,82 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
   }, [units]);
 
   const selectedModule = selected ? getModule(selected.moduleId) : null;
-  const svgRef = useRef<SVGSVGElement>(null);
-
-  // Handle document-level mouse events for dragging from buttons
-  useEffect(() => {
-    if (!draggingModuleId && !draggingUnitUid) return;
-
-    function handleDocumentMouseMove(e: MouseEvent) {
-      if (!svgRef.current) return;
-      
-      const svg = svgRef.current;
-      const rect = svg.getBoundingClientRect();
-      
-      // Only process if mouse is over SVG
-      if (e.clientX < rect.left || e.clientX > rect.right || 
-          e.clientY < rect.top || e.clientY > rect.bottom) {
-        return;
-      }
-
-      const worldPos = screenToWorld(svg, e.clientX, e.clientY);
-      setDragPosition(worldPos);
-
-      if (draggingModuleId) {
-        // Center the module on the mouse cursor for checking
-        const m = getModule(draggingModuleId);
-        const centeredX = worldPos.x - m.widthFt / 2;
-        const centeredY = worldPos.y - m.depthFt / 2;
-        const nearest = findNearestConnector(draggingModuleId, centeredX, centeredY, 0);
-        setSnappedConnector(nearest ? { uid: nearest.uid, connId: nearest.connId } : null);
-      } else if (draggingUnitUid && dragOffset) {
-        // For repositioning existing unit, check for connectors
-        const unit = units.find((u) => u.uid === draggingUnitUid);
-        if (unit) {
-          const newX = worldPos.x - dragOffset.x;
-          const newY = worldPos.y - dragOffset.y;
-          const nearest = findNearestConnector(unit.moduleId, newX, newY, unit.rot, draggingUnitUid);
-          setSnappedConnector(nearest ? { uid: nearest.uid, connId: nearest.connId } : null);
-        }
-      }
-    }
-
-    function handleDocumentMouseUp(e: MouseEvent) {
-      if (draggingModuleId && svgRef.current) {
-        const svg = svgRef.current;
-        const rect = svg.getBoundingClientRect();
-        
-        // Only process if mouse is over SVG
-        if (e.clientX >= rect.left && e.clientX <= rect.right && 
-            e.clientY >= rect.top && e.clientY <= rect.bottom) {
-          const worldPos = screenToWorld(svg, e.clientX, e.clientY);
-          
-          // Check for nearest connector at release position
-          // Center the module on the mouse cursor for checking
-          const m = getModule(draggingModuleId);
-          const centeredX = worldPos.x - m.widthFt / 2;
-          const centeredY = worldPos.y - m.depthFt / 2;
-          const nearest = findNearestConnector(draggingModuleId, centeredX, centeredY, 0);
-          const releaseSnappedConnector = nearest ? { uid: nearest.uid, connId: nearest.connId } : null;
-          
-          if (releaseSnappedConnector) {
-            const targetUnit = units.find((u) => u.uid === releaseSnappedConnector.uid);
-            if (targetUnit) {
-              attach(draggingModuleId, releaseSnappedConnector.connId, targetUnit);
-            }
-          } else {
-            // Place in free space if position is valid
-            placeModuleFree(draggingModuleId, worldPos.x, worldPos.y);
-          }
-        }
-        
-        setDraggingModuleId(null);
-        setDragPosition(null);
-        setSnappedConnector(null);
-      } else if (draggingUnitUid && dragOffset && svgRef.current) {
-        const svg = svgRef.current;
-        const rect = svg.getBoundingClientRect();
-        
-        if (e.clientX >= rect.left && e.clientX <= rect.right && 
-            e.clientY >= rect.top && e.clientY <= rect.bottom) {
-          const worldPos = screenToWorld(svg, e.clientX, e.clientY);
-          
-          // Check for nearest connector at release position (exclude the dragged unit)
-          const unit = units.find((u) => u.uid === draggingUnitUid);
-          if (unit) {
-            const newX = worldPos.x - dragOffset.x;
-            const newY = worldPos.y - dragOffset.y;
-            const nearest = findNearestConnector(unit.moduleId, newX, newY, unit.rot, draggingUnitUid);
-            const releaseSnappedConnector = nearest ? { uid: nearest.uid, connId: nearest.connId } : null;
-            
-            if (releaseSnappedConnector) {
-              // Connect to connector
-              connectExistingUnit(draggingUnitUid, releaseSnappedConnector.connId, releaseSnappedConnector.uid);
-            } else {
-              // Place in free space
-              const m = getModule(unit.moduleId);
-              
-              // Check if position is valid (excluding the dragged unit)
-              if (isValidPosition(unit.moduleId, newX, newY, unit.rot, draggingUnitUid)) {
-                const newUnit: PlacedUnit = { ...unit, xFt: newX, yFt: newY };
-                
-                // Remove any existing connections when moving to free space
-                const filteredConnections = connections.filter(
-                  (c) => c.aUid !== draggingUnitUid && c.bUid !== draggingUnitUid
-                );
-                
-                setUnits(units.map((u) => (u.uid === draggingUnitUid ? newUnit : u)));
-                setConnections(filteredConnections);
-              }
-            }
-          }
-        }
-        
-        setDraggingUnitUid(null);
-        setDragPosition(null);
-        setDragOffset(null);
-        setSnappedConnector(null);
-      }
-    }
-
-    document.addEventListener("mousemove", handleDocumentMouseMove);
-    document.addEventListener("mouseup", handleDocumentMouseUp);
-
-    return () => {
-      document.removeEventListener("mousemove", handleDocumentMouseMove);
-      document.removeEventListener("mouseup", handleDocumentMouseUp);
-    };
-  }, [draggingModuleId, draggingUnitUid, dragPosition, dragOffset, snappedConnector, units]);
 
 
-  // Render drag preview
+  // Simple drag preview
   function renderDragPreview() {
-    if ((!draggingModuleId && !draggingUnitUid) || !dragPosition) return null;
+    if (!draggingModuleId || !dragPosition) return null;
 
-    let m: ModuleDef;
-    let previewX: number;
-    let previewY: number;
-    let previewRot: Rotation;
-    let excludeUid: string | undefined;
+    const m = getModule(draggingModuleId);
+    let previewX = dragPosition.x - m.widthFt / 2;
+    let previewY = dragPosition.y - m.depthFt / 2;
+    let previewRot: Rotation = 0;
 
-    if (draggingModuleId) {
-      // Dragging new module from button
-      m = getModule(draggingModuleId);
-      previewX = dragPosition.x;
-      previewY = dragPosition.y;
-      previewRot = 0;
-
-      // If not snapped to connector, center the preview on the mouse cursor
-      if (!snappedConnector) {
-        previewX = dragPosition.x - m.widthFt / 2;
-        previewY = dragPosition.y - m.depthFt / 2;
-      }
-    } else if (draggingUnitUid && dragOffset) {
-      // Dragging existing unit
-      const unit = units.find((u) => u.uid === draggingUnitUid);
-      if (!unit) return null;
-      
-      m = getModule(unit.moduleId);
-      previewRot = unit.rot;
-      excludeUid = unit.uid;
-      
-      // Calculate preview position based on mouse position and drag offset
-      previewX = dragPosition.x - dragOffset.x;
-      previewY = dragPosition.y - dragOffset.y;
-    } else {
-      return null;
-    }
-
-    // If snapped to connector, calculate position using same logic as attach()
+    // If snapped to connector, calculate position
     if (snappedConnector) {
       const targetUnit = units.find((u) => u.uid === snappedConnector.uid);
       if (targetUnit) {
         const targetMod = getModule(targetUnit.moduleId);
-        
-        // Try all available connectors on the target unit, not just the one specified
-        // This allows us to find the best compatible match (same logic as attach())
-        let bestOverall: {
-          rot: Rotation;
-          conn: ConnectorId;
-          x: number;
-          y: number;
-          score: number;
-        } | null = null;
-
-        for (const targetConnCandidate of targetMod.connectors) {
-          // Skip if connector is already used
-          if (isUsed(targetUnit.uid, targetConnCandidate.id)) continue;
-
-          const aW = connectorWorld(targetUnit, targetMod, targetConnCandidate);
+        const targetConnDef = targetMod.connectors.find(c => c.id === snappedConnector.connId);
+        if (targetConnDef) {
+          const targetWorld = connectorWorld(targetUnit, targetMod, targetConnDef);
           
-          // Find best rotation and connector match
-          let best: { rot: Rotation; conn: ConnectorId; x: number; y: number; score: number } | null = null;
+          // Try to find matching connector and rotation
           for (const rot of m.rotations) {
-            for (const c of m.connectors) {
-              // Check if these connectors can connect
-              if (!canConnect(c.id, targetConnCandidate.id)) {
-                continue;
-              }
+            for (const newConn of m.connectors) {
+              if (!canConnect(newConn.id, snappedConnector.connId)) continue;
               
-              const p = rotatePoint(c.x, c.y, m.widthFt, m.depthFt, rot);
-              const v = rotateVec(c.nx, c.ny, rot);
+              const p = rotatePoint(newConn.x, newConn.y, m.widthFt, m.depthFt, rot);
+              const v = rotateVec(newConn.nx, newConn.ny, rot);
               
-              // Calculate position to align connector points
-              let x = aW.x - p.x;
-              let y = aW.y - p.y;
+              let x = targetWorld.x - p.x;
+              let y = targetWorld.y - p.y;
               
-              // Check connector normal alignment
-              const dot = v.nx * aW.nx + v.ny * aW.ny;
-              
-              // For side-to-side connections (A↔D, B↔F), normals must be opposite
-              const isSideToSide = 
-                (c.id === "E" && targetConnCandidate.id === "W") ||
-                (c.id === "W" && targetConnCandidate.id === "E") ||
-                (c.id === "N" && targetConnCandidate.id === "S") ||
-                (c.id === "S" && targetConnCandidate.id === "N");
-              
-              if (isSideToSide) {
-                // Side-to-side: normals must be opposite (pointing toward each other)
-                if (dot >= -0.7) {
-                  continue; // Skip this rotation - normals not opposite
-                }
-              }
-              
-              // Offset to prevent overlap: move source module away by its dimension in direction of source normal
-              // This works for both side-to-side and front-to-side connections
               const { w, d } = rotatedSize(m.widthFt, m.depthFt, rot);
               if (Math.abs(v.nx) > Math.abs(v.ny)) {
-                // Horizontal connector: offset by width
                 x += v.nx * w;
               } else {
-                // Vertical connector: offset by depth
                 y += v.ny * d;
               }
               
-              // Calculate distance between connector points after positioning
-              const connDist = Math.sqrt((x + p.x - aW.x) ** 2 + (y + p.y - aW.y) ** 2);
-              
-              // Accept if connectors are close enough (within tolerance)
-              // Closer distance = better connection
-              if (connDist < 0.1) {
-                const score = connDist; // Closer to 0 = better
-                
-                if (!best || score < best.score) {
-                  best = { rot, conn: c.id, x, y, score };
-                }
-              }
+              previewX = x;
+              previewY = y;
+              previewRot = rot;
+              break;
             }
+            if (previewX !== dragPosition.x - m.widthFt / 2) break;
           }
-          
-          // Keep track of the best match across all target connectors
-          if (best && (!bestOverall || best.score < bestOverall.score)) {
-            bestOverall = best;
-          }
-        }
-        
-        if (bestOverall) {
-          previewX = bestOverall.x;
-          previewY = bestOverall.y;
-          previewRot = bestOverall.rot;
         }
       }
     }
 
     const { w, d } = rotatedSize(m.widthFt, m.depthFt, previewRot);
+    const bPreview = { x: previewX, y: previewY, w, d };
+    let isValid = snappedConnector ? true : true;
+    if (!snappedConnector) {
+      for (const u of units) {
+        if (hasOverlap(bPreview, bbox(u, getModule(u.moduleId)))) {
+          isValid = false;
+          break;
+        }
+      }
+    }
+    const previewColor = isValid ? KELLY_GREEN : "#cc0000";
 
-    // Check if position is valid
-    // If snapped to connector, it's always valid (green)
-    // Otherwise, check for overlaps (excluding the dragged unit if it's an existing unit)
-    const isValid = snappedConnector ? true : isValidPosition(m.id, previewX, previewY, previewRot, excludeUid);
-    const previewColor = isValid ? KELLY_GREEN : "#cc0000"; // Green if valid, red if invalid
-
-    const frontFace = getFrontFace(previewRot);
-
-  return (
+    return (
       <g
         transform={`translate(${previewX * FT_TO_PX}, ${previewY * FT_TO_PX})`}
         opacity={0.65}
       >
-        {/* Main rectangle - green if valid, red if invalid, no outline */}
         <rect
           x={0}
           y={0}
           width={w * FT_TO_PX}
           height={d * FT_TO_PX}
           fill={previewColor}
+          stroke={previewColor}
+          strokeWidth={2}
         />
-        
-        {/* Roof overhang at front - dotted line */}
-        {(() => {
-          // For corner stables, only show 1ft overhang on door side
-          // For other modules, show full 3ft overhang
-          const isCorner = m.kind === "corner";
-          const overhangFt = isCorner ? 1 : 3;
-          const overhangPx = overhangFt * FT_TO_PX;
-          
-          if (isCorner) {
-            // Find door opening in frontFeatures
-            const doorFeature = m.frontFeatures.find((f) => f.type === "opening");
-            if (!doorFeature) return null;
-            
-            // Map door position to front face based on rotation (same logic as renderDoor)
-            let doorStart: number;
-            let doorEnd: number;
-            
-            if (frontFace === "S") {
-              // Bottom edge - left to right along width
-              doorStart = doorFeature.fromX;
-              doorEnd = doorFeature.toX;
-            } else if (frontFace === "N") {
-              // Top edge - right to left along width (reversed)
-              doorStart = m.widthFt - doorFeature.toX;
-              doorEnd = m.widthFt - doorFeature.fromX;
-            } else if (frontFace === "W") {
-              // Left edge - bottom to top along depth
-              doorStart = doorFeature.fromX;
-              doorEnd = doorFeature.toX;
-            } else {
-              // Right edge - top to bottom along depth (reversed)
-              doorStart = m.depthFt - doorFeature.toX;
-              doorEnd = m.depthFt - doorFeature.fromX;
-            }
-            
-            // Only show overhang for first 1ft from door edge
-            const overhangStart = doorStart;
-            const overhangEnd = Math.min(doorStart + 1, doorEnd);
-            
-            if (frontFace === "S") {
-              // Front is bottom edge - overhang extends downward
-              const startX = overhangStart * FT_TO_PX;
-              const endX = overhangEnd * FT_TO_PX;
-              const y = d * FT_TO_PX + overhangPx;
-              return (
-                <line
-                  x1={startX}
-                  y1={y}
-                  x2={endX}
-                  y2={y}
-                  stroke="#666"
-                  strokeWidth={1}
-                  strokeDasharray="4 4"
-                  opacity={0.65}
-                />
-              );
-            } else if (frontFace === "N") {
-              // Front is top edge - overhang extends upward
-              const startX = overhangStart * FT_TO_PX;
-              const endX = overhangEnd * FT_TO_PX;
-              const y = -overhangPx;
-              return (
-                <line
-                  x1={startX}
-                  y1={y}
-                  x2={endX}
-                  y2={y}
-                  stroke="#666"
-                  strokeWidth={1}
-                  strokeDasharray="4 4"
-                  opacity={0.65}
-                />
-              );
-            } else if (frontFace === "W") {
-              // Front is left edge - overhang extends leftward
-              const startY = overhangStart * FT_TO_PX;
-              const endY = overhangEnd * FT_TO_PX;
-              const x = -overhangPx;
-              return (
-                <line
-                  x1={x}
-                  y1={startY}
-                  x2={x}
-                  y2={endY}
-                  stroke="#666"
-                  strokeWidth={1}
-                  strokeDasharray="4 4"
-                  opacity={0.65}
-                />
-              );
-            } else if (frontFace === "E") {
-              // Front is right edge - overhang extends rightward
-              const startY = overhangStart * FT_TO_PX;
-              const endY = overhangEnd * FT_TO_PX;
-              const x = w * FT_TO_PX + overhangPx;
-              return (
-                <line
-                  x1={x}
-                  y1={startY}
-                  x2={x}
-                  y2={endY}
-                  stroke="#666"
-                  strokeWidth={1}
-                  strokeDasharray="4 4"
-                  opacity={0.65}
-                />
-              );
-            }
-            return null;
-          } else {
-            // Regular modules: full 3ft overhang
-            if (frontFace === "S") {
-              // Front is bottom edge - overhang extends downward
-              return (
-                <line
-                  x1={0}
-                  y1={d * FT_TO_PX + overhangPx}
-                  x2={w * FT_TO_PX}
-                  y2={d * FT_TO_PX + overhangPx}
-                  stroke="#666"
-                  strokeWidth={1}
-                  strokeDasharray="4 4"
-                  opacity={0.65}
-                />
-              );
-            } else if (frontFace === "N") {
-              // Front is top edge - overhang extends upward
-              return (
-                <line
-                  x1={0}
-                  y1={-overhangPx}
-                  x2={w * FT_TO_PX}
-                  y2={-overhangPx}
-                  stroke="#666"
-                  strokeWidth={1}
-                  strokeDasharray="4 4"
-                  opacity={0.65}
-                />
-              );
-            } else if (frontFace === "W") {
-              // Front is left edge - overhang extends leftward
-              return (
-                <line
-                  x1={-overhangPx}
-                  y1={0}
-                  x2={-overhangPx}
-                  y2={d * FT_TO_PX}
-                  stroke="#666"
-                  strokeWidth={1}
-                  strokeDasharray="4 4"
-                  opacity={0.65}
-                />
-              );
-            } else if (frontFace === "E") {
-              // Front is right edge - overhang extends rightward
-              return (
-                <line
-                  x1={w * FT_TO_PX + overhangPx}
-                  y1={0}
-                  x2={w * FT_TO_PX + overhangPx}
-                  y2={d * FT_TO_PX}
-                  stroke="#666"
-                  strokeWidth={1}
-                  strokeDasharray="4 4"
-                  opacity={0.65}
-                />
-              );
-            }
-            return null;
-          }
-        })()}
-        
-        {/* Render door and window indicators */}
-        {m.frontFeatures.map((feature, idx) => {
-          if (feature.type === "opening") {
-            return (
-              <g key={`preview-door-${idx}`}>
-                {renderPreviewDoor(feature, m.widthFt, m.depthFt, previewRot)}
-              </g>
-            );
-          }
-          if (feature.type === "window") {
-            return (
-              <g key={`preview-window-${idx}`}>
-                {renderPreviewWindow(feature, m.widthFt, m.depthFt, previewRot)}
-              </g>
-            );
-          }
-          return null;
-        })}
       </g>
     );
   }
@@ -1994,144 +1041,6 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
           </div>
         </div>
 
-        {/* Pre-built Designs Selector */}
-        {preBuiltDesigns.length > 0 && (
-          <div style={{ marginBottom: 20 }}>
-            <h3 style={{ 
-              margin: "0 0 12px 0", 
-              fontSize: 18, 
-              fontWeight: 600,
-              color: "#1a1a1a",
-              fontFamily: "Inter, sans-serif"
-            }}>
-              Pre-built Designs
-            </h3>
-            <select
-              value={selectedDesignId}
-              onChange={(e) => {
-                if (e.target.value) {
-                  loadDesign(e.target.value);
-                }
-              }}
-              style={{
-                width: "100%",
-                padding: "10px 12px",
-                fontSize: 14,
-                fontFamily: "Inter, sans-serif",
-                border: "1px solid #e0e0e0",
-                borderRadius: 8,
-                backgroundColor: "white",
-                cursor: "pointer",
-                marginBottom: 8,
-              }}
-            >
-              <option value="">Select a design...</option>
-              {preBuiltDesigns.map((design) => (
-                <option key={design.id} value={design.id}>
-                  {design.name} - {design.description || "No description"}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {/* Template Selector */}
-        <div style={{ marginBottom: 20 }}>
-          <h3 style={{ 
-            margin: "0 0 12px 0", 
-            fontSize: 18, 
-            fontWeight: 600,
-            color: "#1a1a1a",
-            fontFamily: "Inter, sans-serif"
-          }}>
-            Layout Templates
-          </h3>
-          <select
-            value={selectedTemplateId}
-            onChange={(e) => {
-              if (e.target.value) {
-                loadTemplate(e.target.value);
-              }
-            }}
-            style={{
-              width: "100%",
-              padding: "10px 12px",
-              fontSize: 14,
-              fontFamily: "Inter, sans-serif",
-              border: "1px solid #e0e0e0",
-              borderRadius: 8,
-              backgroundColor: "white",
-              cursor: "pointer",
-              marginBottom: 8,
-            }}
-          >
-            <option value="">Select a template...</option>
-            {getAllTemplates().map((template) => (
-              <option key={template.id} value={template.id}>
-                {template.name} - {template.description}
-              </option>
-            ))}
-          </select>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              onClick={() => {
-                const templateName = prompt("Enter template name:");
-                if (!templateName) return;
-                const templateDescription = prompt("Enter template description:") || "";
-                const template: LayoutTemplate = {
-                  id: `custom_${Date.now()}`,
-                  name: templateName,
-                  description: templateDescription,
-                  units: units,
-                  connections: connections,
-                };
-                saveTemplate(template);
-                alert("Template saved!");
-                setSelectedTemplateId(template.id);
-              }}
-              style={{
-                flex: 1,
-                padding: "8px 12px",
-                backgroundColor: DARK_GREEN,
-                color: "white",
-                border: "none",
-                borderRadius: 6,
-                cursor: "pointer",
-                fontSize: 13,
-                fontWeight: 600,
-                fontFamily: "Inter, sans-serif",
-                transition: "all 0.2s ease",
-              }}
-            >
-              Save Current
-        </button>
-            {selectedTemplateId && selectedTemplateId.startsWith("custom_") && (
-              <button
-                onClick={() => {
-                  if (confirm("Delete this template?")) {
-                    deleteTemplate(selectedTemplateId);
-                    setSelectedTemplateId("");
-                    alert("Template deleted!");
-                  }
-                }}
-                style={{
-                  padding: "8px 12px",
-                  backgroundColor: "#dc2626",
-                  color: "white",
-                  border: "none",
-                  borderRadius: 6,
-                  cursor: "pointer",
-                  fontSize: 13,
-                  fontWeight: 600,
-                  fontFamily: "Inter, sans-serif",
-                  transition: "all 0.2s ease",
-                }}
-              >
-                Delete
-              </button>
-            )}
-          </div>
-        </div>
 
         <div>
           <h3 style={{ 
@@ -2625,117 +1534,16 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
             Plan View
           </div>
           {/* Zoom Controls */}
-          <div style={{ 
-            display: "flex", 
-            alignItems: "center", 
-            gap: 8,
-            backgroundColor: "white",
-            padding: "6px 12px",
-            borderRadius: 8,
-            border: "1px solid #e0e0e0",
-            boxShadow: "0 1px 3px rgba(0, 0, 0, 0.1)"
-          }}>
-            <button
-              onClick={() => {
-                const newZoom = Math.max(0.25, zoomLevel - 0.25);
-                setZoomLevel(newZoom);
-              }}
-              disabled={zoomLevel <= 0.25}
-              style={{
-                padding: "6px 12px",
-                backgroundColor: zoomLevel <= 0.25 ? "#e0e0e0" : DARK_GREEN,
-                color: zoomLevel <= 0.25 ? "#999" : "white",
-                border: "none",
-                borderRadius: 6,
-                cursor: zoomLevel <= 0.25 ? "not-allowed" : "pointer",
-                fontSize: 14,
-                fontWeight: 600,
-                fontFamily: "Inter, sans-serif",
-                transition: "all 0.2s ease",
-              }}
-            >
-              −
-            </button>
-            <span style={{ 
-              fontSize: 14, 
-              fontWeight: 600, 
-              color: "#1a1a1a",
-              fontFamily: "Inter, sans-serif",
-              minWidth: "50px",
-              textAlign: "center"
-            }}>
-              {Math.round(zoomLevel * 100)}%
-            </span>
-            <button
-              onClick={() => {
-                const newZoom = Math.min(4, zoomLevel + 0.25);
-                setZoomLevel(newZoom);
-              }}
-              disabled={zoomLevel >= 4}
-              style={{
-                padding: "6px 12px",
-                backgroundColor: zoomLevel >= 4 ? "#e0e0e0" : DARK_GREEN,
-                color: zoomLevel >= 4 ? "#999" : "white",
-                border: "none",
-                borderRadius: 6,
-                cursor: zoomLevel >= 4 ? "not-allowed" : "pointer",
-                fontSize: 14,
-                fontWeight: 600,
-                fontFamily: "Inter, sans-serif",
-                transition: "all 0.2s ease",
-              }}
-            >
-              +
-            </button>
-            <button
-              onClick={() => setZoomLevel(1)}
-              style={{
-                padding: "6px 12px",
-                backgroundColor: "#4a5568",
-                color: "white",
-                border: "none",
-                borderRadius: 6,
-                cursor: "pointer",
-                fontSize: 12,
-                fontWeight: 600,
-                fontFamily: "Inter, sans-serif",
-                transition: "all 0.2s ease",
-                marginLeft: 4,
-              }}
-            >
-              Reset
-            </button>
-            <button
-              onClick={rotateLayout}
-              style={{
-                padding: "6px 12px",
-                backgroundColor: "#4a5568",
-                color: "white",
-                border: "none",
-                borderRadius: 6,
-                cursor: "pointer",
-                fontSize: 12,
-                fontWeight: 600,
-                fontFamily: "Inter, sans-serif",
-                transition: "all 0.2s ease",
-                marginLeft: 8,
-              }}
-              title="Rotate entire layout 90°"
-            >
-              ↻ Rotate Layout
-            </button>
-          </div>
         </div>
         <svg
-          ref={svgRef}
-        width="100%"
+          width="100%"
           height="600"
-          viewBox={`${(ext.minX - 15) * FT_TO_PX / zoomLevel} ${(ext.minY - 15) * FT_TO_PX / zoomLevel} ${(ext.maxX - ext.minX + 30) * FT_TO_PX / zoomLevel} ${(ext.maxY - ext.minY + 30) * FT_TO_PX / zoomLevel}`}
+          viewBox={`${(ext.minX - 15) * FT_TO_PX} ${(ext.minY - 15) * FT_TO_PX} ${(ext.maxX - ext.minX + 30) * FT_TO_PX} ${(ext.maxY - ext.minY + 30) * FT_TO_PX}`}
           style={{ 
             border: "2px solid #d0d0d0", 
             borderRadius: 12, 
             backgroundColor: "#ffffff", 
-            cursor: draggingModuleId || draggingUnitUid ? "grabbing" : "default",
+            cursor: draggingModuleId ? "grabbing" : "default",
             boxShadow: "0 2px 8px rgba(0, 0, 0, 0.08)"
           }}
           onMouseMove={handleMouseMove}
@@ -2791,18 +1599,12 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
           const m = getModule(u.moduleId);
           const { w, d } = rotatedSize(m.widthFt, m.depthFt, u.rot);
             const isSelected = u.uid === selectedUid;
-            const isBeingDragged = draggingUnitUid === u.uid;
-            
-            // Hide unit being dragged (preview will show instead)
-            if (isBeingDragged) return null;
-            
           return (
             <g
               key={u.uid}
-                transform={`translate(${u.xFt * FT_TO_PX}, ${u.yFt * FT_TO_PX})`}
+              transform={`translate(${u.xFt * FT_TO_PX}, ${u.yFt * FT_TO_PX})`}
               onClick={() => setSelectedUid(u.uid)}
-                onMouseDown={(e) => handleUnitMouseDown(e, u)}
-                style={{ cursor: "grab" }}
+              style={{ cursor: "pointer" }}
             >
                 {/* Main rectangle */}
               <rect
