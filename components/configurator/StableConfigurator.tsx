@@ -851,13 +851,48 @@ export default function StableConfigurator() {
           const y = aW.y - p.y;
           
           // Calculate score based on connector alignment
-          // All connections should use opposite directions (dot < -0.7) for proper alignment
           const dot = v.nx * aW.nx + v.ny * aW.ny;
           
-          // All connections require opposite directions
-          if (dot >= -0.7) continue; // Must be opposite
+          // C connector (front panel) connects perpendicular to A/B (side connectors)
+          // D connector (side) connects opposite to A/B (side connectors)
+          let isValidConnection = false;
+          let score = 0;
           
-          let score = -dot; // More negative dot = better score
+          if (c.id === "C" && (targetConnCandidate.id === "A" || targetConnCandidate.id === "B")) {
+            // C (front panel) should be perpendicular to A/B (side)
+            // Dot product should be close to 0 (perpendicular)
+            if (Math.abs(dot) < 0.3) {
+              isValidConnection = true;
+              score = Math.abs(dot); // Closer to 0 = better
+            }
+          } else if (c.id === "D" && (targetConnCandidate.id === "A" || targetConnCandidate.id === "B")) {
+            // D (side) should be opposite to A/B (side)
+            if (dot < -0.7) {
+              isValidConnection = true;
+              score = -dot; // More negative = better
+            }
+          } else if ((c.id === "A" || c.id === "B") && (targetConnCandidate.id === "A" || targetConnCandidate.id === "B")) {
+            // Standard to standard: opposite directions
+            if (dot < -0.7) {
+              isValidConnection = true;
+              score = -dot;
+            }
+          } else if ((c.id === "C" || c.id === "D") && (targetConnCandidate.id === "C" || targetConnCandidate.id === "D")) {
+            // Corner to corner: can connect C to D or vice versa
+            // C (front) to D (side) should be perpendicular
+            // D (side) to C (front) should be perpendicular
+            if (Math.abs(dot) < 0.3) {
+              isValidConnection = true;
+              score = Math.abs(dot);
+            }
+          }
+          
+          if (!isValidConnection) continue;
+          
+          // Prioritize C connector over D when connecting corner to standard
+          if (c.id === "C" && (targetConnCandidate.id === "A" || targetConnCandidate.id === "B")) {
+            score -= 0.5; // Bonus for using C connector
+          }
           
           // Calculate front face preference to ensure doors face inward
           // For ring formation, we want all doors to face toward the center
@@ -1045,13 +1080,45 @@ export default function StableConfigurator() {
         const y = aW.y - p.y;
         
         // Calculate score based on connector alignment
-        // All connections should use opposite directions (dot < -0.7)
         const dot = v.nx * aW.nx + v.ny * aW.ny;
         
-        // All connections require opposite directions
-        if (dot >= -0.7) continue; // Must be opposite
+        // C connector (front panel) connects perpendicular to A/B (side connectors)
+        // D connector (side) connects opposite to A/B (side connectors)
+        let isValidConnection = false;
+        let score = 0;
         
-        let score = -dot; // More negative dot = better score
+        if (c.id === "C" && (targetConn === "A" || targetConn === "B")) {
+          // C (front panel) should be perpendicular to A/B (side)
+          if (Math.abs(dot) < 0.3) {
+            isValidConnection = true;
+            score = Math.abs(dot);
+          }
+        } else if (c.id === "D" && (targetConn === "A" || targetConn === "B")) {
+          // D (side) should be opposite to A/B (side)
+          if (dot < -0.7) {
+            isValidConnection = true;
+            score = -dot;
+          }
+        } else if ((c.id === "A" || c.id === "B") && (targetConn === "A" || targetConn === "B")) {
+          // Standard to standard: opposite directions
+          if (dot < -0.7) {
+            isValidConnection = true;
+            score = -dot;
+          }
+        } else if ((c.id === "C" || c.id === "D") && (targetConn === "C" || targetConn === "D")) {
+          // Corner to corner: perpendicular
+          if (Math.abs(dot) < 0.3) {
+            isValidConnection = true;
+            score = Math.abs(dot);
+          }
+        }
+        
+        if (!isValidConnection) continue;
+        
+        // Prioritize C connector over D when connecting corner to standard
+        if (c.id === "C" && (targetConn === "A" || targetConn === "B")) {
+          score -= 0.5; // Bonus for using C connector
+        }
         
         // Calculate front face preference for standard buildings connecting to corners
         let frontFaceBonus = 0;
@@ -1588,13 +1655,45 @@ export default function StableConfigurator() {
               const y = aW.y - p.y;
               
               // Calculate score based on connector alignment
-              // All connections should use opposite directions (dot < -0.7)
               const dot = v.nx * aW.nx + v.ny * aW.ny;
               
-              // All connections require opposite directions
-              if (dot >= -0.7) continue; // Must be opposite
+              // C connector (front panel) connects perpendicular to A/B (side connectors)
+              // D connector (side) connects opposite to A/B (side connectors)
+              let isValidConnection = false;
+              let score = 0;
               
-              let score = -dot; // More negative dot = better score
+              if (c.id === "C" && (targetConnCandidate.id === "A" || targetConnCandidate.id === "B")) {
+                // C (front panel) should be perpendicular to A/B (side)
+                if (Math.abs(dot) < 0.3) {
+                  isValidConnection = true;
+                  score = Math.abs(dot);
+                }
+              } else if (c.id === "D" && (targetConnCandidate.id === "A" || targetConnCandidate.id === "B")) {
+                // D (side) should be opposite to A/B (side)
+                if (dot < -0.7) {
+                  isValidConnection = true;
+                  score = -dot;
+                }
+              } else if ((c.id === "A" || c.id === "B") && (targetConnCandidate.id === "A" || targetConnCandidate.id === "B")) {
+                // Standard to standard: opposite directions
+                if (dot < -0.7) {
+                  isValidConnection = true;
+                  score = -dot;
+                }
+              } else if ((c.id === "C" || c.id === "D") && (targetConnCandidate.id === "C" || targetConnCandidate.id === "D")) {
+                // Corner to corner: perpendicular
+                if (Math.abs(dot) < 0.3) {
+                  isValidConnection = true;
+                  score = Math.abs(dot);
+                }
+              }
+              
+              if (!isValidConnection) continue;
+              
+              // Prioritize C connector over D when connecting corner to standard
+              if (c.id === "C" && (targetConnCandidate.id === "A" || targetConnCandidate.id === "B")) {
+                score -= 0.5; // Bonus for using C connector
+              }
               
               // Calculate front face preference for standard buildings connecting to corners
               let frontFaceBonus = 0;
