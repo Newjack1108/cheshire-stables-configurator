@@ -27,13 +27,13 @@ export const DEFAULT_TEMPLATES: LayoutTemplate[] = [
     name: "L-Shaped Corner",
     description: "Corner stable with two additional stables forming an L-shape",
     units: [
-      { uid: "corner1", moduleId: "corner_16x12", xFt: 0, yFt: 0, rot: 0, selectedExtras: [] },
+      { uid: "corner1", moduleId: "corner_lh_16x12", xFt: 0, yFt: 0, rot: 0, selectedExtras: [] },
       { uid: "stable1", moduleId: "stable_12x12", xFt: 16, yFt: 0, rot: 0, selectedExtras: [] },
       { uid: "stable2", moduleId: "stable_12x12", xFt: 0, yFt: 12, rot: 0, selectedExtras: [] },
     ],
     connections: [
-      { aUid: "corner1", aConn: "D", bUid: "stable1", bConn: "A" },
-      { aUid: "corner1", aConn: "C", bUid: "stable2", bConn: "A" },
+      { aUid: "corner1", aConn: "F", bUid: "stable1", bConn: "A" },
+      { aUid: "corner1", aConn: "E", bUid: "stable2", bConn: "A" },
     ],
   },
   {

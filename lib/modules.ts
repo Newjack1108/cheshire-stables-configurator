@@ -33,20 +33,20 @@ const makeStraightConnectors = (w: number, d: number) => [
   { id: "B" as const, x: w, y: d / 2, nx: 1, ny: 0 }, // Right side
 ];
 
-// Corner stable connectors: 
-// C connector on front panel next to door (center of blank panel section)
-// D connector on side nearest door
-const makeCornerStableConnectors = (w: number, d: number) => [
-  { id: "C" as const, x: 10, y: d, nx: 0, ny: 1 }, // Front panel, center of 12ft blank section (10ft from left)
-  { id: "D" as const, x: 0, y: d / 2, nx: -1, ny: 0 }, // Left side (nearest door)
-];
-
 // RH Corner stable connectors:
 // C connector on front panel next to door (center of blank panel section)
 // D connector on side nearest door
 const makeRHCornerStableConnectors = (w: number, d: number) => [
   { id: "C" as const, x: 6, y: d, nx: 0, ny: 1 }, // Front panel, center of 12ft blank section (6ft from left)
   { id: "D" as const, x: w, y: d / 2, nx: 1, ny: 0 }, // Right side (nearest door)
+];
+
+// LH Corner stable connectors (mirror of RH):
+// E connector on front panel next to door (center of blank panel section)
+// F connector on side nearest door
+const makeLHCornerStableConnectors = (w: number, d: number) => [
+  { id: "E" as const, x: 10, y: d, nx: 0, ny: 1 }, // Front panel, center of 12ft blank section (10ft from left)
+  { id: "F" as const, x: 0, y: d / 2, nx: -1, ny: 0 }, // Left side (nearest door)
 ];
 
 // Standard stable layout: 1ft blank + 4ft door + Xft blank + 2ft window + 1ft blank
@@ -224,18 +224,18 @@ export const MODULES: ModuleDef[] = [
       { id: "water_point", name: "Water Point", price: 250, description: "Water connection point" },
     ],
   },
-  // Corner Stable - 16x12 (left-hand)
+  // LH Corner Stable - 16x12 (left-hand, mirror of RH)
   // Layout: 4ft door on left (0-4), 12ft blank on right (4-16)
-  // S connector at center of 12ft blank = 10ft from left (4 + 6), 6ft from right
+  // E connector at center of 12ft blank = 10ft from left (4 + 6), 6ft from right
   {
-    id: "corner_16x12",
-    name: "Corner Stable 16x12",
+    id: "corner_lh_16x12",
+    name: "LH Corner Stable 16x12",
     kind: "corner",
     widthFt: 16,
     depthFt: 12,
     rotations: [0, 90, 180, 270],
     basePrice: 5200,
-    connectors: makeCornerStableConnectors(16, 12),
+    connectors: makeLHCornerStableConnectors(16, 12),
     frontFeatures: [
       // 4ft door on left (0-4ft)
       {

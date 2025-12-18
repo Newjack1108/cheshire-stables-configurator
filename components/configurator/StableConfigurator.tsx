@@ -704,7 +704,9 @@ export default function StableConfigurator() {
   // Check if a module position is valid (no overlaps)
   // excludeUid: optional UID to exclude from overlap check (useful when dragging existing unit)
   // Check if two connectors can connect based on building types
-  // New system: Standard boxes have A and B, Corner boxes have C and D
+  // Standard boxes: A and B
+  // RH Corner boxes: C and D
+  // LH Corner boxes: E and F
   // All connections should allow doors to face inward (toward center of ring)
   function canConnect(
     sourceConn: ConnectorId,
@@ -719,24 +721,31 @@ export default function StableConfigurator() {
              (sourceConn === "B" && targetConn === "A");
     }
     
-    // Corner to Standard: C or D can connect to A or B
+    // Corner to Standard: C/D/E/F can connect to A or B
     if (sourceKind === "corner" && 
         (targetKind === "stable" || targetKind === "shelter" || targetKind === "tack_room")) {
-      if ((sourceConn === "C" || sourceConn === "D") && 
+      if ((sourceConn === "C" || sourceConn === "D" || sourceConn === "E" || sourceConn === "F") && 
           (targetConn === "A" || targetConn === "B")) return true;
     }
     
-    // Standard to Corner: A or B can connect to C or D
+    // Standard to Corner: A or B can connect to C/D/E/F
     if ((sourceKind === "stable" || sourceKind === "shelter" || sourceKind === "tack_room") &&
         targetKind === "corner") {
       if ((sourceConn === "A" || sourceConn === "B") && 
-          (targetConn === "C" || targetConn === "D")) return true;
+          (targetConn === "C" || targetConn === "D" || targetConn === "E" || targetConn === "F")) return true;
     }
     
-    // Corner to Corner: C can connect to D (for closing the ring)
+    // Corner to Corner: 
+    // RH corners (C/D) can connect to LH corners (E/F)
+    // Same type corners can connect C to D or E to F
     if (sourceKind === "corner" && targetKind === "corner") {
-      return (sourceConn === "C" && targetConn === "D") ||
-             (sourceConn === "D" && targetConn === "C");
+      // RH to LH
+      if ((sourceConn === "C" || sourceConn === "D") && (targetConn === "E" || targetConn === "F")) return true;
+      if ((sourceConn === "E" || sourceConn === "F") && (targetConn === "C" || targetConn === "D")) return true;
+      // RH to RH
+      if ((sourceConn === "C" && targetConn === "D") || (sourceConn === "D" && targetConn === "C")) return true;
+      // LH to LH
+      if ((sourceConn === "E" && targetConn === "F") || (sourceConn === "F" && targetConn === "E")) return true;
     }
     
     return false;
@@ -867,15 +876,15 @@ export default function StableConfigurator() {
           let isValidConnection = false;
           let score = 0;
           
-          if (c.id === "C" && (targetConnCandidate.id === "A" || targetConnCandidate.id === "B")) {
-            // C (front panel) connects to A/B (side)
+          if ((c.id === "C" || c.id === "E") && (targetConnCandidate.id === "A" || targetConnCandidate.id === "B")) {
+            // C/E (front panel) connects to A/B (side)
             // Connector vectors should be perpendicular, and front panels should be perpendicular
             if (Math.abs(dot) < 0.3 && frontFacesPerpendicular) {
               isValidConnection = true;
               score = Math.abs(dot); // Closer to 0 = better
             }
-          } else if (c.id === "D" && (targetConnCandidate.id === "A" || targetConnCandidate.id === "B")) {
-            // D (side) connects to A/B (side)
+          } else if ((c.id === "D" || c.id === "F") && (targetConnCandidate.id === "A" || targetConnCandidate.id === "B")) {
+            // D/F (side) connects to A/B (side)
             // Connector vectors should be opposite, and front panels should be perpendicular
             if (dot < -0.7 && frontFacesPerpendicular) {
               isValidConnection = true;
@@ -887,7 +896,8 @@ export default function StableConfigurator() {
               isValidConnection = true;
               score = -dot;
             }
-          } else if ((c.id === "C" || c.id === "D") && (targetConnCandidate.id === "C" || targetConnCandidate.id === "D")) {
+          } else if ((c.id === "C" || c.id === "D" || c.id === "E" || c.id === "F") && 
+                     (targetConnCandidate.id === "C" || targetConnCandidate.id === "D" || targetConnCandidate.id === "E" || targetConnCandidate.id === "F")) {
             // Corner to corner: connectors perpendicular, front panels perpendicular
             if (Math.abs(dot) < 0.3 && frontFacesPerpendicular) {
               isValidConnection = true;
@@ -897,9 +907,9 @@ export default function StableConfigurator() {
           
           if (!isValidConnection) continue;
           
-          // Prioritize C connector over D when connecting corner to standard
-          if (c.id === "C" && (targetConnCandidate.id === "A" || targetConnCandidate.id === "B")) {
-            score -= 0.5; // Bonus for using C connector
+          // Prioritize C/E connector over D/F when connecting corner to standard
+          if ((c.id === "C" || c.id === "E") && (targetConnCandidate.id === "A" || targetConnCandidate.id === "B")) {
+            score -= 0.5; // Bonus for using C/E connector
           }
           
           // Calculate front face preference to ensure doors face inward
@@ -1104,15 +1114,15 @@ export default function StableConfigurator() {
         let isValidConnection = false;
         let score = 0;
         
-        if (c.id === "C" && (targetConn === "A" || targetConn === "B")) {
-          // C (front panel) connects to A/B (side)
+        if ((c.id === "C" || c.id === "E") && (targetConn === "A" || targetConn === "B")) {
+          // C/E (front panel) connects to A/B (side)
           // Connector vectors should be perpendicular, and front panels should be perpendicular
           if (Math.abs(dot) < 0.3 && frontFacesPerpendicular) {
             isValidConnection = true;
             score = Math.abs(dot);
           }
-        } else if (c.id === "D" && (targetConn === "A" || targetConn === "B")) {
-          // D (side) connects to A/B (side)
+        } else if ((c.id === "D" || c.id === "F") && (targetConn === "A" || targetConn === "B")) {
+          // D/F (side) connects to A/B (side)
           // Connector vectors should be opposite, and front panels should be perpendicular
           if (dot < -0.7 && frontFacesPerpendicular) {
             isValidConnection = true;
@@ -1124,7 +1134,8 @@ export default function StableConfigurator() {
             isValidConnection = true;
             score = -dot;
           }
-        } else if ((c.id === "C" || c.id === "D") && (targetConn === "C" || targetConn === "D")) {
+        } else if ((c.id === "C" || c.id === "D" || c.id === "E" || c.id === "F") && 
+                   (targetConn === "C" || targetConn === "D" || targetConn === "E" || targetConn === "F")) {
           // Corner to corner: connectors perpendicular, front panels perpendicular
           if (Math.abs(dot) < 0.3 && frontFacesPerpendicular) {
             isValidConnection = true;
@@ -1134,9 +1145,9 @@ export default function StableConfigurator() {
         
         if (!isValidConnection) continue;
         
-        // Prioritize C connector over D when connecting corner to standard
-        if (c.id === "C" && (targetConn === "A" || targetConn === "B")) {
-          score -= 0.5; // Bonus for using C connector
+        // Prioritize C/E connector over D/F when connecting corner to standard
+        if ((c.id === "C" || c.id === "E") && (targetConn === "A" || targetConn === "B")) {
+          score -= 0.5; // Bonus for using C/E connector
         }
         
         // Calculate front face preference for standard buildings connecting to corners
@@ -1690,15 +1701,15 @@ export default function StableConfigurator() {
               let isValidConnection = false;
               let score = 0;
               
-              if (c.id === "C" && (targetConnCandidate.id === "A" || targetConnCandidate.id === "B")) {
-                // C (front panel) connects to A/B (side)
+              if ((c.id === "C" || c.id === "E") && (targetConnCandidate.id === "A" || targetConnCandidate.id === "B")) {
+                // C/E (front panel) connects to A/B (side)
                 // Connector vectors should be perpendicular, and front panels should be perpendicular
                 if (Math.abs(dot) < 0.3 && frontFacesPerpendicular) {
                   isValidConnection = true;
                   score = Math.abs(dot);
                 }
-              } else if (c.id === "D" && (targetConnCandidate.id === "A" || targetConnCandidate.id === "B")) {
-                // D (side) connects to A/B (side)
+              } else if ((c.id === "D" || c.id === "F") && (targetConnCandidate.id === "A" || targetConnCandidate.id === "B")) {
+                // D/F (side) connects to A/B (side)
                 // Connector vectors should be opposite, and front panels should be perpendicular
                 if (dot < -0.7 && frontFacesPerpendicular) {
                   isValidConnection = true;
@@ -1710,7 +1721,8 @@ export default function StableConfigurator() {
                   isValidConnection = true;
                   score = -dot;
                 }
-              } else if ((c.id === "C" || c.id === "D") && (targetConnCandidate.id === "C" || targetConnCandidate.id === "D")) {
+              } else if ((c.id === "C" || c.id === "D" || c.id === "E" || c.id === "F") && 
+                         (targetConnCandidate.id === "C" || targetConnCandidate.id === "D" || targetConnCandidate.id === "E" || targetConnCandidate.id === "F")) {
                 // Corner to corner: connectors perpendicular, front panels perpendicular
                 if (Math.abs(dot) < 0.3 && frontFacesPerpendicular) {
                   isValidConnection = true;
@@ -1720,9 +1732,9 @@ export default function StableConfigurator() {
               
               if (!isValidConnection) continue;
               
-              // Prioritize C connector over D when connecting corner to standard
-              if (c.id === "C" && (targetConnCandidate.id === "A" || targetConnCandidate.id === "B")) {
-                score -= 0.5; // Bonus for using C connector
+              // Prioritize C/E connector over D/F when connecting corner to standard
+              if ((c.id === "C" || c.id === "E") && (targetConnCandidate.id === "A" || targetConnCandidate.id === "B")) {
+                score -= 0.5; // Bonus for using C/E connector
               }
               
               // Calculate front face preference for standard buildings connecting to corners
@@ -2475,7 +2487,7 @@ export default function StableConfigurator() {
               + Add Shelter
             </button>
             <button
-              onClick={() => attach("corner_16x12", "C")}
+              onClick={() => attach("corner_lh_16x12", "E")}
               style={{
                 padding: "14px 20px",
                 backgroundColor: DARK_GREEN,
@@ -2500,14 +2512,14 @@ export default function StableConfigurator() {
                 e.currentTarget.style.boxShadow = "0 2px 4px rgba(26, 93, 26, 0.2)";
               }}
               onMouseDown={(e) => {
-                handleButtonMouseDown("corner_16x12");
+                handleButtonMouseDown("corner_lh_16x12");
                 e.currentTarget.style.backgroundColor = DARK_GREEN_ACTIVE;
               }}
               onMouseUp={(e) => {
                 e.currentTarget.style.backgroundColor = DARK_GREEN_HOVER;
               }}
             >
-              + Add Corner Stable
+              + Add LH Corner Stable
             </button>
             <button
               onClick={() => attach("corner_rh_16x12", "C")}

@@ -14,8 +14,9 @@ export type FrontFeature =
 
 // Building-type-specific connector IDs
 // Standard buildings: A, B (on opposite sides)
-// Corner buildings: C (on front panel next to door), D (on side nearest door)
-export type ConnectorId = "A" | "B" | "C" | "D";
+// RH Corner buildings: C (on front panel next to door), D (on side nearest door)
+// LH Corner buildings: E (on front panel next to door), F (on side nearest door)
+export type ConnectorId = "A" | "B" | "C" | "D" | "E" | "F";
 
 export type ConnectorDef = {
   id: ConnectorId;
