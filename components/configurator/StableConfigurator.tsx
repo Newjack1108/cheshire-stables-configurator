@@ -862,13 +862,20 @@ export default function StableConfigurator() {
 
 function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUnit) {
     const sourceUnit = targetUnit || selected;
-    if (!sourceUnit) return;
+    if (!sourceUnit) {
+      console.log("No source unit selected");
+      return;
+    }
 
     const aMod = getModule(sourceUnit.moduleId);
     const newMod = getModule(moduleId);
 
-    // Try all available connectors on the target unit, not just the one specified
-    // This allows us to find the best compatible match
+    // Try the specified connector first, then others if it doesn't work
+    const connectorsToTry = [
+      aMod.connectors.find(c => c.id === targetConn),
+      ...aMod.connectors.filter(c => c.id !== targetConn)
+    ].filter(Boolean) as typeof aMod.connectors;
+
     let bestOverall: {
       rot: Rotation;
       conn: ConnectorId;
@@ -878,7 +885,8 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
       score: number;
     } | null = null;
 
-    for (const targetConnCandidate of aMod.connectors) {
+    for (const targetConnCandidate of connectorsToTry) {
+      if (!targetConnCandidate) continue;
       if (isUsed(sourceUnit.uid, targetConnCandidate.id)) continue;
 
       const aDef = targetConnCandidate;
@@ -892,38 +900,58 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
       score: number;
     } | null = null;
 
-    for (const rot of newMod.rotations) {
-      for (const c of newMod.connectors) {
+      for (const rot of newMod.rotations) {
+        for (const c of newMod.connectors) {
           // Check if these connectors can connect
           if (!canConnect(c.id, targetConnCandidate.id)) {
             continue;
           }
           
-        const p = rotatePoint(
-          c.x,
-          c.y,
-          newMod.widthFt,
-          newMod.depthFt,
-          rot
-        );
-        const v = rotateVec(c.nx, c.ny, rot);
+          const p = rotatePoint(
+            c.x,
+            c.y,
+            newMod.widthFt,
+            newMod.depthFt,
+            rot
+          );
+          const v = rotateVec(c.nx, c.ny, rot);
           
           // Calculate position to align connector points
           let x = aW.x - p.x;
           let y = aW.y - p.y;
           
           // Check if connector normals allow connection (must be opposite)
-        const dot = v.nx * aW.nx + v.ny * aW.ny;
-          const score = -dot; // Better score = more opposite normals
+          const dot = v.nx * aW.nx + v.ny * aW.ny;
           
-          // Position the new box so connectors align
-          // No offset needed - connectors should align exactly
+          // For connectors to connect, normals must point toward each other (dot product should be negative)
+          // Allow some tolerance for floating point precision
+          if (dot > -0.3) {
+            continue; // Skip if normals aren't opposite enough
+          }
           
-        if (!best || score < best.score) {
-          best = { rot, conn: c.id, x, y, score };
+          // Offset the new box so it sits next to the existing box, not overlapping
+          // The connector position p is relative to the box's top-left corner
+          // After aligning connector points, we need to offset by the box dimension
+          // in the direction the connector normal points
+          const { w, d } = rotatedSize(newMod.widthFt, newMod.depthFt, rot);
+          
+          // Offset in the direction of the connector normal
+          // This moves the box so its edge touches the existing box's edge
+          if (Math.abs(v.nx) > Math.abs(v.ny)) {
+            // Horizontal connector: offset by width in the direction of normal
+            x += v.nx * w;
+          } else {
+            // Vertical connector: offset by depth in the direction of normal
+            y += v.ny * d;
+          }
+          
+          const score = -dot; // Better score = more opposite normals (closer to -1)
+          
+          if (!best || score < best.score) {
+            best = { rot, conn: c.id, x, y, score };
+          }
         }
       }
-    }
 
       // Keep track of the best match across all target connectors
       if (best && (!bestOverall || best.score < bestOverall.score)) {
@@ -934,8 +962,12 @@ function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUn
       }
     }
 
-    if (!bestOverall) return;
+    if (!bestOverall) {
+      console.log("No valid connection found for", moduleId, "to", sourceUnit.moduleId);
+      return;
+    }
     const best = bestOverall;
+    console.log("Found connection:", { moduleId, targetConn: best.targetConn, newConn: best.conn, position: { x: best.x, y: best.y, rot: best.rot } });
 
     const newUnit: PlacedUnit = {
       uid: uid(),
