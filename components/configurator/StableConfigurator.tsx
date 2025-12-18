@@ -886,78 +886,58 @@ export default function StableConfigurator() {
           
           if (c.id === "C" && targetConnCandidate.id === "B") {
             // RH Corner C (front panel) connects to B (side)
-            // Connector vectors should be perpendicular
+            // Connector vectors should be perpendicular, walls should be parallel
             if (Math.abs(dot) < 0.3) {
               isValidConnection = true;
               score = Math.abs(dot); // Closer to 0 = better
               
-              // Check if front panels are perpendicular (bonus for correct alignment)
+              // Walls should be parallel (front faces should be same direction)
               const newFrontFace = getFrontFace(rot);
               const targetFrontFace = getFrontFace(sourceUnit.rot);
-              const frontFacesPerpendicular = 
-                (newFrontFace === "N" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
-                (newFrontFace === "S" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
-                (newFrontFace === "E" && (targetFrontFace === "N" || targetFrontFace === "S")) ||
-                (newFrontFace === "W" && (targetFrontFace === "N" || targetFrontFace === "S"));
-              if (frontFacesPerpendicular) {
-                score -= 0.1; // Bonus for perpendicular front panels
+              if (newFrontFace === targetFrontFace) {
+                score -= 0.2; // Bonus for parallel walls
               }
             }
           } else if (c.id === "D" && targetConnCandidate.id === "A") {
             // RH Corner D (side) connects to A (side)
-            // Connector vectors should be opposite
+            // Connector vectors should be opposite, walls should be parallel
             if (dot < -0.7) {
               isValidConnection = true;
               score = -dot; // More negative = better
               
-              // Check if front panels are perpendicular (bonus for correct alignment)
+              // Walls should be parallel (front faces should be same direction)
               const newFrontFace = getFrontFace(rot);
               const targetFrontFace = getFrontFace(sourceUnit.rot);
-              const frontFacesPerpendicular = 
-                (newFrontFace === "N" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
-                (newFrontFace === "S" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
-                (newFrontFace === "E" && (targetFrontFace === "N" || targetFrontFace === "S")) ||
-                (newFrontFace === "W" && (targetFrontFace === "N" || targetFrontFace === "S"));
-              if (frontFacesPerpendicular) {
-                score -= 0.1; // Bonus for perpendicular front panels
+              if (newFrontFace === targetFrontFace) {
+                score -= 0.2; // Bonus for parallel walls
               }
             }
           } else if (c.id === "E" && targetConnCandidate.id === "A") {
             // LH Corner E (front panel) connects to A (side)
-            // Connector vectors should be perpendicular
+            // Connector vectors should be perpendicular, walls should be parallel
             if (Math.abs(dot) < 0.3) {
               isValidConnection = true;
               score = Math.abs(dot); // Closer to 0 = better
               
-              // Check if front panels are perpendicular (bonus for correct alignment)
+              // Walls should be parallel (front faces should be same direction)
               const newFrontFace = getFrontFace(rot);
               const targetFrontFace = getFrontFace(sourceUnit.rot);
-              const frontFacesPerpendicular = 
-                (newFrontFace === "N" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
-                (newFrontFace === "S" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
-                (newFrontFace === "E" && (targetFrontFace === "N" || targetFrontFace === "S")) ||
-                (newFrontFace === "W" && (targetFrontFace === "N" || targetFrontFace === "S"));
-              if (frontFacesPerpendicular) {
-                score -= 0.1; // Bonus for perpendicular front panels
+              if (newFrontFace === targetFrontFace) {
+                score -= 0.2; // Bonus for parallel walls
               }
             }
           } else if (c.id === "F" && targetConnCandidate.id === "B") {
             // LH Corner F (side) connects to B (side)
-            // Connector vectors should be opposite
+            // Connector vectors should be opposite, walls should be parallel
             if (dot < -0.7) {
               isValidConnection = true;
               score = -dot; // More negative = better
               
-              // Check if front panels are perpendicular (bonus for correct alignment)
+              // Walls should be parallel (front faces should be same direction)
               const newFrontFace = getFrontFace(rot);
               const targetFrontFace = getFrontFace(sourceUnit.rot);
-              const frontFacesPerpendicular = 
-                (newFrontFace === "N" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
-                (newFrontFace === "S" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
-                (newFrontFace === "E" && (targetFrontFace === "N" || targetFrontFace === "S")) ||
-                (newFrontFace === "W" && (targetFrontFace === "N" || targetFrontFace === "S"));
-              if (frontFacesPerpendicular) {
-                score -= 0.1; // Bonus for perpendicular front panels
+              if (newFrontFace === targetFrontFace) {
+                score -= 0.2; // Bonus for parallel walls
               }
             }
           } else if ((c.id === "A" || c.id === "B") && (targetConnCandidate.id === "A" || targetConnCandidate.id === "B")) {
@@ -968,75 +948,23 @@ export default function StableConfigurator() {
             }
           } else if ((c.id === "C" || c.id === "D" || c.id === "E" || c.id === "F") && 
                      (targetConnCandidate.id === "C" || targetConnCandidate.id === "D" || targetConnCandidate.id === "E" || targetConnCandidate.id === "F")) {
-            // Corner to corner: connectors perpendicular
+            // Corner to corner: connectors perpendicular, walls should be parallel
             if (Math.abs(dot) < 0.3) {
               isValidConnection = true;
               score = Math.abs(dot);
               
-              // Check if front panels are perpendicular (bonus for correct alignment)
+              // Walls should be parallel (front faces should be same direction)
               const newFrontFace = getFrontFace(rot);
               const targetFrontFace = getFrontFace(sourceUnit.rot);
-              const frontFacesPerpendicular = 
-                (newFrontFace === "N" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
-                (newFrontFace === "S" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
-                (newFrontFace === "E" && (targetFrontFace === "N" || targetFrontFace === "S")) ||
-                (newFrontFace === "W" && (targetFrontFace === "N" || targetFrontFace === "S"));
-              if (frontFacesPerpendicular) {
-                score -= 0.1; // Bonus for perpendicular front panels
+              if (newFrontFace === targetFrontFace) {
+                score -= 0.2; // Bonus for parallel walls
               }
             }
           }
           
           if (!isValidConnection) continue;
           
-          // Calculate front face preference to ensure doors face inward
-          // For ring formation, we want all doors to face toward the center
-          let frontFaceBonus = 0;
-          
-          // Calculate center of all existing units to determine inward direction
-          if (units.length > 0) {
-            const centerX = units.reduce((sum, u) => {
-              const m = getModule(u.moduleId);
-              return sum + u.xFt + m.widthFt / 2;
-            }, 0) / units.length;
-            const centerY = units.reduce((sum, u) => {
-              const m = getModule(u.moduleId);
-              return sum + u.yFt + m.depthFt / 2;
-            }, 0) / units.length;
-            
-            // Create a temporary unit to calculate front face direction
-            const tempUnit: PlacedUnit = {
-              uid: "temp",
-              moduleId: newMod.id,
-              xFt: x,
-              yFt: y,
-              rot,
-              selectedExtras: []
-            };
-            
-            const newCenterX = x + newMod.widthFt / 2;
-            const newCenterY = y + newMod.depthFt / 2;
-            
-            // Determine which direction the front should face to point toward center
-            const dx = centerX - newCenterX;
-            const dy = centerY - newCenterY;
-            
-            let targetFrontFace: "N" | "E" | "S" | "W" | null = null;
-            if (Math.abs(dx) > Math.abs(dy)) {
-              targetFrontFace = dx > 0 ? "E" : "W";
-            } else {
-              targetFrontFace = dy > 0 ? "S" : "N";
-            }
-            
-            if (targetFrontFace) {
-              const currentFrontFace = getFrontFace(rot);
-              if (currentFrontFace === targetFrontFace) {
-                frontFaceBonus = 0.3; // Bonus for facing inward
-              }
-            }
-          }
-          
-          const totalScore = score - frontFaceBonus;
+          const totalScore = score;
           
           if (!best || totalScore < best.score) {
             best = { rot, conn: c.id, x, y, score: totalScore };
@@ -1187,74 +1115,58 @@ export default function StableConfigurator() {
         
         if (c.id === "C" && targetConn === "B") {
           // RH Corner C (front panel) connects to B (side)
+          // Connector vectors should be perpendicular, walls should be parallel
           if (Math.abs(dot) < 0.3) {
             isValidConnection = true;
             score = Math.abs(dot);
             
-            // Check if front panels are perpendicular (bonus for correct alignment)
+            // Walls should be parallel (front faces should be same direction)
             const newFrontFace = getFrontFace(rot);
             const targetFrontFace = getFrontFace(targetUnit.rot);
-            const frontFacesPerpendicular = 
-              (newFrontFace === "N" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
-              (newFrontFace === "S" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
-              (newFrontFace === "E" && (targetFrontFace === "N" || targetFrontFace === "S")) ||
-              (newFrontFace === "W" && (targetFrontFace === "N" || targetFrontFace === "S"));
-            if (frontFacesPerpendicular) {
-              score -= 0.1; // Bonus for perpendicular front panels
+            if (newFrontFace === targetFrontFace) {
+              score -= 0.2; // Bonus for parallel walls
             }
           }
         } else if (c.id === "D" && targetConn === "A") {
           // RH Corner D (side) connects to A (side)
+          // Connector vectors should be opposite, walls should be parallel
           if (dot < -0.7) {
             isValidConnection = true;
             score = -dot;
             
-            // Check if front panels are perpendicular (bonus for correct alignment)
+            // Walls should be parallel (front faces should be same direction)
             const newFrontFace = getFrontFace(rot);
             const targetFrontFace = getFrontFace(targetUnit.rot);
-            const frontFacesPerpendicular = 
-              (newFrontFace === "N" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
-              (newFrontFace === "S" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
-              (newFrontFace === "E" && (targetFrontFace === "N" || targetFrontFace === "S")) ||
-              (newFrontFace === "W" && (targetFrontFace === "N" || targetFrontFace === "S"));
-            if (frontFacesPerpendicular) {
-              score -= 0.1; // Bonus for perpendicular front panels
+            if (newFrontFace === targetFrontFace) {
+              score -= 0.2; // Bonus for parallel walls
             }
           }
         } else if (c.id === "E" && targetConn === "A") {
           // LH Corner E (front panel) connects to A (side)
+          // Connector vectors should be perpendicular, walls should be parallel
           if (Math.abs(dot) < 0.3) {
             isValidConnection = true;
             score = Math.abs(dot);
             
-            // Check if front panels are perpendicular (bonus for correct alignment)
+            // Walls should be parallel (front faces should be same direction)
             const newFrontFace = getFrontFace(rot);
             const targetFrontFace = getFrontFace(targetUnit.rot);
-            const frontFacesPerpendicular = 
-              (newFrontFace === "N" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
-              (newFrontFace === "S" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
-              (newFrontFace === "E" && (targetFrontFace === "N" || targetFrontFace === "S")) ||
-              (newFrontFace === "W" && (targetFrontFace === "N" || targetFrontFace === "S"));
-            if (frontFacesPerpendicular) {
-              score -= 0.1; // Bonus for perpendicular front panels
+            if (newFrontFace === targetFrontFace) {
+              score -= 0.2; // Bonus for parallel walls
             }
           }
         } else if (c.id === "F" && targetConn === "B") {
           // LH Corner F (side) connects to B (side)
+          // Connector vectors should be opposite, walls should be parallel
           if (dot < -0.7) {
             isValidConnection = true;
             score = -dot;
             
-            // Check if front panels are perpendicular (bonus for correct alignment)
+            // Walls should be parallel (front faces should be same direction)
             const newFrontFace = getFrontFace(rot);
             const targetFrontFace = getFrontFace(targetUnit.rot);
-            const frontFacesPerpendicular = 
-              (newFrontFace === "N" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
-              (newFrontFace === "S" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
-              (newFrontFace === "E" && (targetFrontFace === "N" || targetFrontFace === "S")) ||
-              (newFrontFace === "W" && (targetFrontFace === "N" || targetFrontFace === "S"));
-            if (frontFacesPerpendicular) {
-              score -= 0.1; // Bonus for perpendicular front panels
+            if (newFrontFace === targetFrontFace) {
+              score -= 0.2; // Bonus for parallel walls
             }
           }
         } else if ((c.id === "A" || c.id === "B") && (targetConn === "A" || targetConn === "B")) {
@@ -1265,49 +1177,23 @@ export default function StableConfigurator() {
           }
         } else if ((c.id === "C" || c.id === "D" || c.id === "E" || c.id === "F") && 
                    (targetConn === "C" || targetConn === "D" || targetConn === "E" || targetConn === "F")) {
-          // Corner to corner: connectors perpendicular
+          // Corner to corner: connectors perpendicular, walls should be parallel
           if (Math.abs(dot) < 0.3) {
             isValidConnection = true;
             score = Math.abs(dot);
             
-            // Check if front panels are perpendicular (bonus for correct alignment)
+            // Walls should be parallel (front faces should be same direction)
             const newFrontFace = getFrontFace(rot);
             const targetFrontFace = getFrontFace(targetUnit.rot);
-            const frontFacesPerpendicular = 
-              (newFrontFace === "N" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
-              (newFrontFace === "S" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
-              (newFrontFace === "E" && (targetFrontFace === "N" || targetFrontFace === "S")) ||
-              (newFrontFace === "W" && (targetFrontFace === "N" || targetFrontFace === "S"));
-            if (frontFacesPerpendicular) {
-              score -= 0.1; // Bonus for perpendicular front panels
+            if (newFrontFace === targetFrontFace) {
+              score -= 0.2; // Bonus for parallel walls
             }
           }
         }
         
         if (!isValidConnection) continue;
         
-        // Calculate front face preference for standard buildings connecting to corners
-        let frontFaceBonus = 0;
-        if ((unitMod.kind === "stable" || unitMod.kind === "shelter" || unitMod.kind === "tack_room") &&
-            targetMod.kind === "corner") {
-          const tempUnit: PlacedUnit = {
-            uid: "temp",
-            moduleId: unitMod.id,
-            xFt: x,
-            yFt: y,
-            rot,
-            selectedExtras: []
-          };
-          const inward = shouldFaceInward(tempUnit, unitMod, targetUnit, targetMod, c.id, targetConn);
-          if (inward) {
-            const currentFrontFace = getFrontFace(rot);
-            if (currentFrontFace === inward.targetFrontFace) {
-              frontFaceBonus = 0.2;
-            }
-          }
-        }
-        
-        const totalScore = score - frontFaceBonus;
+        const totalScore = score;
         
         if (!best || totalScore < best.score) {
           best = { rot, conn: c.id, x, y, score: totalScore };
@@ -1851,127 +1737,85 @@ export default function StableConfigurator() {
               
               if (c.id === "C" && targetConnCandidate.id === "B") {
                 // RH Corner C (front panel) connects to B (side)
+                // Connector vectors should be perpendicular, walls should be parallel
                 if (Math.abs(dot) < 0.3) {
                   isValidConnection = true;
                   score = Math.abs(dot);
                   
-                  // Check if front panels are perpendicular (bonus for correct alignment)
+                  // Walls should be parallel (front faces should be same direction)
                   const newFrontFace = getFrontFace(rot);
                   const targetFrontFace = getFrontFace(targetUnit.rot);
-                  const frontFacesPerpendicular = 
-                    (newFrontFace === "N" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
-                    (newFrontFace === "S" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
-                    (newFrontFace === "E" && (targetFrontFace === "N" || targetFrontFace === "S")) ||
-                    (newFrontFace === "W" && (targetFrontFace === "N" || targetFrontFace === "S"));
-                  if (frontFacesPerpendicular) {
-                    score -= 0.1; // Bonus for perpendicular front panels
+                  if (newFrontFace === targetFrontFace) {
+                    score -= 0.2; // Bonus for parallel walls
                   }
                 }
               } else if (c.id === "D" && targetConnCandidate.id === "A") {
                 // RH Corner D (side) connects to A (side)
+                // Connector vectors should be opposite, walls should be parallel
                 if (dot < -0.7) {
                   isValidConnection = true;
                   score = -dot;
                   
-                  // Check if front panels are perpendicular (bonus for correct alignment)
+                  // Walls should be parallel (front faces should be same direction)
                   const newFrontFace = getFrontFace(rot);
                   const targetFrontFace = getFrontFace(targetUnit.rot);
-                  const frontFacesPerpendicular = 
-                    (newFrontFace === "N" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
-                    (newFrontFace === "S" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
-                    (newFrontFace === "E" && (targetFrontFace === "N" || targetFrontFace === "S")) ||
-                    (newFrontFace === "W" && (targetFrontFace === "N" || targetFrontFace === "S"));
-                  if (frontFacesPerpendicular) {
-                    score -= 0.1; // Bonus for perpendicular front panels
+                  if (newFrontFace === targetFrontFace) {
+                    score -= 0.2; // Bonus for parallel walls
                   }
                 }
               } else if (c.id === "E" && targetConnCandidate.id === "A") {
                 // LH Corner E (front panel) connects to A (side)
+                // Connector vectors should be perpendicular, walls should be parallel
                 if (Math.abs(dot) < 0.3) {
                   isValidConnection = true;
                   score = Math.abs(dot);
                   
-                  // Check if front panels are perpendicular (bonus for correct alignment)
+                  // Walls should be parallel (front faces should be same direction)
                   const newFrontFace = getFrontFace(rot);
                   const targetFrontFace = getFrontFace(targetUnit.rot);
-                  const frontFacesPerpendicular = 
-                    (newFrontFace === "N" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
-                    (newFrontFace === "S" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
-                    (newFrontFace === "E" && (targetFrontFace === "N" || targetFrontFace === "S")) ||
-                    (newFrontFace === "W" && (targetFrontFace === "N" || targetFrontFace === "S"));
-                  if (frontFacesPerpendicular) {
-                    score -= 0.1; // Bonus for perpendicular front panels
+                  if (newFrontFace === targetFrontFace) {
+                    score -= 0.2; // Bonus for parallel walls
                   }
                 }
               } else if (c.id === "F" && targetConnCandidate.id === "B") {
                 // LH Corner F (side) connects to B (side)
+                // Connector vectors should be opposite, walls should be parallel
                 if (dot < -0.7) {
                   isValidConnection = true;
                   score = -dot;
                   
-                  // Check if front panels are perpendicular (bonus for correct alignment)
+                  // Walls should be parallel (front faces should be same direction)
                   const newFrontFace = getFrontFace(rot);
                   const targetFrontFace = getFrontFace(targetUnit.rot);
-                  const frontFacesPerpendicular = 
-                    (newFrontFace === "N" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
-                    (newFrontFace === "S" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
-                    (newFrontFace === "E" && (targetFrontFace === "N" || targetFrontFace === "S")) ||
-                    (newFrontFace === "W" && (targetFrontFace === "N" || targetFrontFace === "S"));
-                  if (frontFacesPerpendicular) {
-                    score -= 0.1; // Bonus for perpendicular front panels
+                  if (newFrontFace === targetFrontFace) {
+                    score -= 0.2; // Bonus for parallel walls
                   }
                 }
               } else if ((c.id === "A" || c.id === "B") && (targetConnCandidate.id === "A" || targetConnCandidate.id === "B")) {
-                // Standard to standard: opposite connector directions (perpendicular front panels not required)
+                // Standard to standard: opposite connector directions
                 if (dot < -0.7) {
                   isValidConnection = true;
                   score = -dot;
                 }
               } else if ((c.id === "C" || c.id === "D" || c.id === "E" || c.id === "F") && 
                          (targetConnCandidate.id === "C" || targetConnCandidate.id === "D" || targetConnCandidate.id === "E" || targetConnCandidate.id === "F")) {
-                // Corner to corner: connectors perpendicular
+                // Corner to corner: connectors perpendicular, walls should be parallel
                 if (Math.abs(dot) < 0.3) {
                   isValidConnection = true;
                   score = Math.abs(dot);
                   
-                  // Check if front panels are perpendicular (bonus for correct alignment)
+                  // Walls should be parallel (front faces should be same direction)
                   const newFrontFace = getFrontFace(rot);
                   const targetFrontFace = getFrontFace(targetUnit.rot);
-                  const frontFacesPerpendicular = 
-                    (newFrontFace === "N" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
-                    (newFrontFace === "S" && (targetFrontFace === "E" || targetFrontFace === "W")) ||
-                    (newFrontFace === "E" && (targetFrontFace === "N" || targetFrontFace === "S")) ||
-                    (newFrontFace === "W" && (targetFrontFace === "N" || targetFrontFace === "S"));
-                  if (frontFacesPerpendicular) {
-                    score -= 0.1; // Bonus for perpendicular front panels
+                  if (newFrontFace === targetFrontFace) {
+                    score -= 0.2; // Bonus for parallel walls
                   }
                 }
               }
               
               if (!isValidConnection) continue;
               
-              // Calculate front face preference for standard buildings connecting to corners
-              let frontFaceBonus = 0;
-              if ((m.kind === "stable" || m.kind === "shelter" || m.kind === "tack_room") &&
-                  targetMod.kind === "corner") {
-                const tempUnit: PlacedUnit = {
-                  uid: "temp",
-                  moduleId: m.id,
-                  xFt: x,
-                  yFt: y,
-                  rot,
-                  selectedExtras: []
-                };
-                const inward = shouldFaceInward(tempUnit, m, targetUnit, targetMod, c.id, targetConnCandidate.id);
-                if (inward) {
-                  const currentFrontFace = getFrontFace(rot);
-                  if (currentFrontFace === inward.targetFrontFace) {
-                    frontFaceBonus = 0.2;
-                  }
-                }
-              }
-              
-              const totalScore = score - frontFaceBonus;
+              const totalScore = score;
               
               if (!best || totalScore < best.score) {
                 best = { rot, conn: c.id, x, y, score: totalScore };
