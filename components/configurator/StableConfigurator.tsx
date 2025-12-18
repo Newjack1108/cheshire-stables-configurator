@@ -685,6 +685,11 @@ export default function StableConfigurator() {
         for (const conn of m.connectors) {
           if (isUsed(u.uid, conn.id)) continue;
           
+          // Check if these connectors can actually connect
+          if (!canConnect(draggedConn.connId, draggedMod.kind, conn.id, m.kind)) {
+            continue;
+          }
+          
           const connWorld = connectorWorld(u, m, conn);
           const dx = connWorld.x - draggedConn.x;
           const dy = connWorld.y - draggedConn.y;
@@ -1319,11 +1324,20 @@ export default function StableConfigurator() {
     if (draggingModuleId) {
       // Find nearest connector for snapping
       // Center the module on the mouse cursor for checking
+      // Try all rotations to find the best snap
       const m = getModule(draggingModuleId);
       const centeredX = worldPos.x - m.widthFt / 2;
       const centeredY = worldPos.y - m.depthFt / 2;
-      const nearest = findNearestConnector(draggingModuleId, centeredX, centeredY, 0);
-      setSnappedConnector(nearest ? { uid: nearest.uid, connId: nearest.connId } : null);
+      
+      let bestNearest: { uid: string; connId: ConnectorId; distance: number } | null = null;
+      for (const rot of m.rotations) {
+        const nearest = findNearestConnector(draggingModuleId, centeredX, centeredY, rot);
+        if (nearest && (!bestNearest || nearest.distance < bestNearest.distance)) {
+          bestNearest = nearest;
+        }
+      }
+      
+      setSnappedConnector(bestNearest ? { uid: bestNearest.uid, connId: bestNearest.connId } : null);
     } else if (draggingUnitUid && dragOffset) {
       // For repositioning existing unit, check for connectors
       // Use the unit's new position to find nearest connector (exclude the dragged unit)
@@ -1344,11 +1358,20 @@ export default function StableConfigurator() {
       
       // Check for nearest connector at release position
       // Center the module on the mouse cursor for checking
+      // Try all rotations to find the best snap
       const m = getModule(draggingModuleId);
       const centeredX = worldPos.x - m.widthFt / 2;
       const centeredY = worldPos.y - m.depthFt / 2;
-      const nearest = findNearestConnector(draggingModuleId, centeredX, centeredY, 0);
-      const releaseSnappedConnector = nearest ? { uid: nearest.uid, connId: nearest.connId } : null;
+      
+      let bestNearest: { uid: string; connId: ConnectorId; distance: number } | null = null;
+      for (const rot of m.rotations) {
+        const nearest = findNearestConnector(draggingModuleId, centeredX, centeredY, rot);
+        if (nearest && (!bestNearest || nearest.distance < bestNearest.distance)) {
+          bestNearest = nearest;
+        }
+      }
+      
+      const releaseSnappedConnector = bestNearest ? { uid: bestNearest.uid, connId: bestNearest.connId } : null;
       
       if (releaseSnappedConnector) {
         // Attach to connector
