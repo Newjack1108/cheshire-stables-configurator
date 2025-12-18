@@ -711,7 +711,7 @@ export default function StableConfigurator() {
           if (isUsed(u.uid, conn.id)) continue;
           
           // Check if these connectors can actually connect
-          if (!canConnect(draggedConn.connId, draggedMod.kind, conn.id, m.kind)) {
+          if (!canConnect(draggedConn.connId, conn.id)) {
             continue;
           }
           
@@ -737,57 +737,24 @@ export default function StableConfigurator() {
   // Standard boxes: A and B
   // RH Corner boxes: C connects to B, D connects to A
   // LH Corner boxes: E connects to A, F connects to B
-  function canConnect(
-    sourceConn: ConnectorId,
-    sourceKind: "stable" | "shelter" | "corner" | "tack_room",
-    targetConn: ConnectorId,
-    targetKind: "stable" | "shelter" | "corner" | "tack_room"
-  ): boolean {
-    // Standard building to Standard building: A connects to B
-    if ((sourceKind === "stable" || sourceKind === "shelter" || sourceKind === "tack_room") &&
-        (targetKind === "stable" || targetKind === "shelter" || targetKind === "tack_room")) {
-      return (sourceConn === "A" && targetConn === "B") ||
-             (sourceConn === "B" && targetConn === "A");
-    }
-    
-    // RH Corner to Standard: C connects to B, D connects to A
-    if (sourceKind === "corner" && 
-        (targetKind === "stable" || targetKind === "shelter" || targetKind === "tack_room")) {
-      // Check if source is RH corner (has C or D connectors)
-      if (sourceConn === "C" && targetConn === "B") return true;
-      if (sourceConn === "D" && targetConn === "A") return true;
-      // Check if source is LH corner (has E or F connectors)
-      if (sourceConn === "E" && targetConn === "A") return true;
-      if (sourceConn === "F" && targetConn === "B") return true;
-    }
-    
-    // Standard to Corner: reverse of above
-    if ((sourceKind === "stable" || sourceKind === "shelter" || sourceKind === "tack_room") &&
-        targetKind === "corner") {
-      // RH corner: C connects to B, D connects to A
-      if (sourceConn === "B" && targetConn === "C") return true;
-      if (sourceConn === "A" && targetConn === "D") return true;
-      // LH corner: E connects to A, F connects to B
-      if (sourceConn === "A" && targetConn === "E") return true;
-      if (sourceConn === "B" && targetConn === "F") return true;
-    }
-    
-    // Corner to Corner: 
-    // RH corners (C/D) can connect to LH corners (E/F)
-    // Same type corners can connect C to D or E to F
-    if (sourceKind === "corner" && targetKind === "corner") {
-      // RH to LH
-      if ((sourceConn === "C" && targetConn === "E") || (sourceConn === "C" && targetConn === "F")) return true;
-      if ((sourceConn === "D" && targetConn === "E") || (sourceConn === "D" && targetConn === "F")) return true;
-      if ((sourceConn === "E" && targetConn === "C") || (sourceConn === "E" && targetConn === "D")) return true;
-      if ((sourceConn === "F" && targetConn === "C") || (sourceConn === "F" && targetConn === "D")) return true;
-      // RH to RH
-      if ((sourceConn === "C" && targetConn === "D") || (sourceConn === "D" && targetConn === "C")) return true;
-      // LH to LH
-      if ((sourceConn === "E" && targetConn === "F") || (sourceConn === "F" && targetConn === "E")) return true;
-    }
-    
-    return false;
+  // Simple connector compatibility rules (all bidirectional):
+  // A ↔ B, E, D
+  // B ↔ A, F, C
+  // C ↔ B
+  // D ↔ A, F
+  // E ↔ A
+  // F ↔ B, D
+  function canConnect(sourceConn: ConnectorId, targetConn: ConnectorId): boolean {
+    const allowedPairs = [
+      ["A", "B"], ["A", "E"], ["A", "D"],
+      ["B", "F"], ["B", "C"],
+      ["D", "F"]
+    ];
+    // Check both directions since all are bidirectional
+    return allowedPairs.some(([a, b]) => 
+      (sourceConn === a && targetConn === b) || 
+      (sourceConn === b && targetConn === a)
+    );
   }
 
   // Calculate if front should face inward when connecting standard to corner
@@ -880,8 +847,8 @@ export default function StableConfigurator() {
 
       for (const rot of newMod.rotations) {
         for (const c of newMod.connectors) {
-          // Check if these connectors can connect based on building types
-          if (!canConnect(c.id, newMod.kind, targetConnCandidate.id, aMod.kind)) {
+          // Check if these connectors can connect
+          if (!canConnect(c.id, targetConnCandidate.id)) {
             continue;
           }
           
@@ -892,128 +859,23 @@ export default function StableConfigurator() {
             newMod.depthFt,
             rot
           );
-          const v = rotateVec(c.nx, c.ny, rot);
           
-          // Calculate base position (aligning connector points)
-          let x = aW.x - p.x;
-          let y = aW.y - p.y;
+          // Calculate position to align connector points
+          const x = aW.x - p.x;
+          const y = aW.y - p.y;
           
-          // For front-to-side connections, adjust position so walls touch without overlapping
-          // When front wall aligns with side wall, offset by corner's width so walls touch
-          if ((c.id === "E" && targetConnCandidate.id === "A") || 
-              (c.id === "A" && targetConnCandidate.id === "E")) {
-            // E→A: Corner's front wall (becomes left wall at rot=90) should touch standard's left wall
-            // At rot=90, E is at left edge (x=0 relative to corner), A is at left edge (x=0 on standard)
-            // Align connectors first, then offset corner to the left by its width
-            if (rot === 90) {
-              const { w } = rotatedSize(newMod.widthFt, newMod.depthFt, rot);
-              x = aW.x - w; // Move corner left so its right edge touches standard's left edge
-            }
-          } else if ((c.id === "C" && targetConnCandidate.id === "B") ||
-                     (c.id === "B" && targetConnCandidate.id === "C")) {
-            // C→B: Corner's front wall (becomes right wall at rot=270) should touch standard's right wall
-            // At rot=270, C is at right edge, B is at right edge
-            // Align connectors first, then offset corner to the right
-            if (rot === 270) {
-              // x already positions corner's left edge at standard's right edge via connector alignment
-              // No additional offset needed - connector alignment already positions correctly
-            }
-          }
+          // Calculate distance between connector points after positioning
+          // This should be close to 0 when connectors are properly aligned
+          const connDist = Math.sqrt((x + p.x - aW.x) ** 2 + (y + p.y - aW.y) ** 2);
           
-          // Calculate score based on connector alignment
-          const dot = v.nx * aW.nx + v.ny * aW.ny;
-          
-          let isValidConnection = false;
-          let score = 0;
-          
-          // Specific connector mappings:
-          // RH Corner: C connects to B, D connects to A
-          // LH Corner: E connects to A, F connects to B
-          // Also handle reverse: Standard B connects to Corner C, Standard A connects to Corner D/E/F
-          
-          if (c.id === "C" && targetConnCandidate.id === "B") {
-            // RH Corner C (front panel) connects to B (side)
-            // Corner's front wall should align with standard's right wall
-            // C's normal (0,1) at rot=0 points down from front
-            // At rot=270: C moves to right side with normal (1,0) pointing right - matches B!
-            // When walls align, connector normals are parallel (dot ≈ 1), not perpendicular
-            if (rot === 270 && dot > 0.7) {
-              isValidConnection = true;
-              score = 1 - dot; // Closer to 1 = better (more parallel)
+          // Accept if connectors are close enough (within tolerance)
+          // Closer distance = better connection
+          if (connDist < 0.1) {
+            const score = connDist; // Closer to 0 = better
+            
+            if (!best || score < best.score) {
+              best = { rot, conn: c.id, x, y, score };
             }
-          } else if (c.id === "B" && targetConnCandidate.id === "C") {
-            // Standard B connects to RH Corner C (front panel)
-            // Same logic: corner's front wall should align with standard's right wall
-            if (rot === 270 && dot > 0.7) {
-              isValidConnection = true;
-              score = 1 - dot;
-            }
-          } else if (c.id === "D" && targetConnCandidate.id === "A") {
-            // RH Corner D (side) connects to A (side)
-            // Connector vectors should be opposite
-            if (dot < -0.7) {
-              isValidConnection = true;
-              score = -dot; // More negative = better
-            }
-          } else if (c.id === "A" && targetConnCandidate.id === "D") {
-            // Standard A connects to RH Corner D (side)
-            // Connector vectors should be opposite
-            if (dot < -0.7) {
-              isValidConnection = true;
-              score = -dot; // More negative = better
-            }
-          } else if (c.id === "E" && targetConnCandidate.id === "A") {
-            // LH Corner E (front panel) connects to A (side)
-            // Corner's front wall should align with standard's left wall
-            // E's normal (0,1) at rot=0 points down from front
-            // At rot=90: E moves to left side with normal (-1,0) pointing left - matches A!
-            // When walls align, connector normals are parallel (dot ≈ 1), not perpendicular
-            if (rot === 90 && dot > 0.7) {
-              isValidConnection = true;
-              score = 1 - dot; // Closer to 1 = better (more parallel)
-            }
-          } else if (c.id === "A" && targetConnCandidate.id === "E") {
-            // Standard A connects to LH Corner E (front panel)
-            // Same logic: corner's front wall should align with standard's left wall
-            if (rot === 90 && dot > 0.7) {
-              isValidConnection = true;
-              score = 1 - dot;
-            }
-          } else if (c.id === "F" && targetConnCandidate.id === "B") {
-            // LH Corner F (side) connects to B (side)
-            // Connector vectors should be opposite
-            if (dot < -0.7) {
-              isValidConnection = true;
-              score = -dot; // More negative = better
-            }
-          } else if (c.id === "B" && targetConnCandidate.id === "F") {
-            // Standard B connects to LH Corner F (side)
-            // Connector vectors should be opposite
-            if (dot < -0.7) {
-              isValidConnection = true;
-              score = -dot; // More negative = better
-            }
-          } else if ((c.id === "A" || c.id === "B") && (targetConnCandidate.id === "A" || targetConnCandidate.id === "B")) {
-            // Standard to standard: opposite connector directions
-            if (dot < -0.7) {
-              isValidConnection = true;
-              score = -dot;
-            }
-          } else if ((c.id === "C" || c.id === "D" || c.id === "E" || c.id === "F") && 
-                     (targetConnCandidate.id === "C" || targetConnCandidate.id === "D" || targetConnCandidate.id === "E" || targetConnCandidate.id === "F")) {
-            // Corner to corner: connectors perpendicular
-            if (Math.abs(dot) < 0.3) {
-              isValidConnection = true;
-              score = Math.abs(dot);
-            }
-          }
-          
-          if (!isValidConnection) continue;
-          
-          const totalScore = score;
-          
-          if (!best || totalScore < best.score) {
-            best = { rot, conn: c.id, x, y, score: totalScore };
           }
         }
       }
@@ -1136,127 +998,28 @@ export default function StableConfigurator() {
           }
         }
         
-        // Check if these connectors can connect based on building types
-        if (!canConnect(c.id, unitMod.kind, targetConn, targetMod.kind)) {
+        // Check if these connectors can connect
+        if (!canConnect(c.id, targetConn)) {
           continue;
         }
         
         const p = rotatePoint(c.x, c.y, unitMod.widthFt, unitMod.depthFt, rot);
-        const v = rotateVec(c.nx, c.ny, rot);
         
-        // Calculate base position (aligning connector points)
-        let x = aW.x - p.x;
-        let y = aW.y - p.y;
+        // Calculate position to align connector points
+        const x = aW.x - p.x;
+        const y = aW.y - p.y;
         
-        // For front-to-side connections, adjust position so walls touch without overlapping
-        if ((c.id === "E" && targetConn === "A") || 
-            (c.id === "A" && targetConn === "E")) {
-          // E→A: Corner's front wall (becomes left wall at rot=90) should touch standard's left wall
-          if (rot === 90) {
-            const { w } = rotatedSize(unitMod.widthFt, unitMod.depthFt, rot);
-            x = aW.x - w; // Position corner's right edge at standard's left edge
-          }
-        } else if ((c.id === "C" && targetConn === "B") ||
-                   (c.id === "B" && targetConn === "C")) {
-          // C→B: Corner's front wall (becomes right wall at rot=270) should touch standard's right wall
-          if (rot === 270) {
-            const { w } = rotatedSize(unitMod.widthFt, unitMod.depthFt, rot);
-            x = aW.x; // Position corner's left edge at standard's right edge
-          }
-        }
+        // Calculate distance between connector points after positioning
+        const connDist = Math.sqrt((x + p.x - aW.x) ** 2 + (y + p.y - aW.y) ** 2);
         
-        // Calculate score based on connector alignment
-        const dot = v.nx * aW.nx + v.ny * aW.ny;
-        
-        let isValidConnection = false;
-        let score = 0;
-        
-        // Specific connector mappings:
-        // RH Corner: C connects to B, D connects to A
-        // LH Corner: E connects to A, F connects to B
-        // Also handle reverse: Standard B connects to Corner C, Standard A connects to Corner D/E/F
-        
-        if (c.id === "C" && targetConn === "B") {
-          // RH Corner C (front panel) connects to B (side)
-          // Corner's front wall should align with standard's right wall
-          // At rot=270: C moves to right side with normal (1,0) - matches B!
-          // When walls align, connector normals are parallel (dot ≈ 1)
-          if (rot === 270 && dot > 0.7) {
-            isValidConnection = true;
-            score = 1 - dot;
+        // Accept if connectors are close enough (within tolerance)
+        // Closer distance = better connection
+        if (connDist < 0.1) {
+          const score = connDist; // Closer to 0 = better
+          
+          if (!best || score < best.score) {
+            best = { rot, conn: c.id, x, y, score };
           }
-        } else if (c.id === "B" && targetConn === "C") {
-          // Standard B connects to RH Corner C (front panel)
-          // Same logic: corner's front wall should align with standard's right wall
-          if (rot === 270 && dot > 0.7) {
-            isValidConnection = true;
-            score = 1 - dot;
-          }
-        } else if (c.id === "D" && targetConn === "A") {
-          // RH Corner D (side) connects to A (side)
-          // Connector vectors should be opposite
-          if (dot < -0.7) {
-            isValidConnection = true;
-            score = -dot;
-          }
-        } else if (c.id === "A" && targetConn === "D") {
-          // Standard A connects to RH Corner D (side)
-          // Connector vectors should be opposite
-          if (dot < -0.7) {
-            isValidConnection = true;
-            score = -dot;
-          }
-        } else if (c.id === "E" && targetConn === "A") {
-          // LH Corner E (front panel) connects to A (side)
-          // Corner's front wall should align with standard's left wall
-          // At rot=90: E moves to left side with normal (-1,0) - matches A!
-          // When walls align, connector normals are parallel (dot ≈ 1)
-          if (rot === 90 && dot > 0.7) {
-            isValidConnection = true;
-            score = 1 - dot;
-          }
-        } else if (c.id === "A" && targetConn === "E") {
-          // Standard A connects to LH Corner E (front panel)
-          // Same logic: corner's front wall should align with standard's left wall
-          if (rot === 90 && dot > 0.7) {
-            isValidConnection = true;
-            score = 1 - dot;
-          }
-        } else if (c.id === "F" && targetConn === "B") {
-          // LH Corner F (side) connects to B (side)
-          // Connector vectors should be opposite
-          if (dot < -0.7) {
-            isValidConnection = true;
-            score = -dot;
-          }
-        } else if (c.id === "B" && targetConn === "F") {
-          // Standard B connects to LH Corner F (side)
-          // Connector vectors should be opposite
-          if (dot < -0.7) {
-            isValidConnection = true;
-            score = -dot;
-          }
-        } else if ((c.id === "A" || c.id === "B") && (targetConn === "A" || targetConn === "B")) {
-          // Standard to standard: opposite connector directions
-          if (dot < -0.7) {
-            isValidConnection = true;
-            score = -dot;
-          }
-        } else if ((c.id === "C" || c.id === "D" || c.id === "E" || c.id === "F") && 
-                   (targetConn === "C" || targetConn === "D" || targetConn === "E" || targetConn === "F")) {
-          // Corner to corner: connectors perpendicular
-          if (Math.abs(dot) < 0.3) {
-            isValidConnection = true;
-            score = Math.abs(dot);
-          }
-        }
-        
-        if (!isValidConnection) continue;
-        
-        const totalScore = score;
-        
-        if (!best || totalScore < best.score) {
-          best = { rot, conn: c.id, x, y, score: totalScore };
         }
       }
     }
@@ -1772,127 +1535,28 @@ export default function StableConfigurator() {
           let best: { rot: Rotation; conn: ConnectorId; x: number; y: number; score: number } | null = null;
           for (const rot of m.rotations) {
             for (const c of m.connectors) {
-              // Check if these connectors can connect based on building types
-              if (!canConnect(c.id, m.kind, targetConnCandidate.id, targetMod.kind)) {
+              // Check if these connectors can connect
+              if (!canConnect(c.id, targetConnCandidate.id)) {
                 continue;
               }
               
               const p = rotatePoint(c.x, c.y, m.widthFt, m.depthFt, rot);
-              const v = rotateVec(c.nx, c.ny, rot);
               
-              // Calculate base position (aligning connector points)
-              let x = aW.x - p.x;
-              let y = aW.y - p.y;
+              // Calculate position to align connector points
+              const x = aW.x - p.x;
+              const y = aW.y - p.y;
               
-              // For front-to-side connections, adjust position so walls touch without overlapping
-              if ((c.id === "E" && targetConnCandidate.id === "A") || 
-                  (c.id === "A" && targetConnCandidate.id === "E")) {
-                // E→A: Corner's front wall (becomes left wall at rot=90) should touch standard's left wall
-                if (rot === 90) {
-                  const { w } = rotatedSize(m.widthFt, m.depthFt, rot);
-                  x = aW.x - w; // Position corner's right edge at standard's left edge
-                }
-              } else if ((c.id === "C" && targetConnCandidate.id === "B") ||
-                         (c.id === "B" && targetConnCandidate.id === "C")) {
-                // C→B: Corner's front wall (becomes right wall at rot=270) should touch standard's right wall
-                if (rot === 270) {
-                  const { w } = rotatedSize(m.widthFt, m.depthFt, rot);
-                  x = aW.x; // Position corner's left edge at standard's right edge
-                }
-              }
+              // Calculate distance between connector points after positioning
+              const connDist = Math.sqrt((x + p.x - aW.x) ** 2 + (y + p.y - aW.y) ** 2);
               
-              // Calculate score based on connector alignment
-              const dot = v.nx * aW.nx + v.ny * aW.ny;
-              
-              let isValidConnection = false;
-              let score = 0;
-              
-              // Specific connector mappings:
-              // RH Corner: C connects to B, D connects to A
-              // LH Corner: E connects to A, F connects to B
-              // Also handle reverse: Standard B connects to Corner C, Standard A connects to Corner D/E/F
-              
-              if (c.id === "C" && targetConnCandidate.id === "B") {
-                // RH Corner C (front panel) connects to B (side)
-                // Corner's front wall should align with standard's right wall
-                // At rot=270: C moves to right side with normal (1,0) - matches B!
-                // When walls align, connector normals are parallel (dot ≈ 1)
-                if (rot === 270 && dot > 0.7) {
-                  isValidConnection = true;
-                  score = 1 - dot;
+              // Accept if connectors are close enough (within tolerance)
+              // Closer distance = better connection
+              if (connDist < 0.1) {
+                const score = connDist; // Closer to 0 = better
+                
+                if (!best || score < best.score) {
+                  best = { rot, conn: c.id, x, y, score };
                 }
-              } else if (c.id === "B" && targetConnCandidate.id === "C") {
-                // Standard B connects to RH Corner C (front panel)
-                // Same logic: corner's front wall should align with standard's right wall
-                if (rot === 270 && dot > 0.7) {
-                  isValidConnection = true;
-                  score = 1 - dot;
-                }
-              } else if (c.id === "D" && targetConnCandidate.id === "A") {
-                // RH Corner D (side) connects to A (side)
-                // Connector vectors should be opposite
-                if (dot < -0.7) {
-                  isValidConnection = true;
-                  score = -dot;
-                }
-              } else if (c.id === "A" && targetConnCandidate.id === "D") {
-                // Standard A connects to RH Corner D (side)
-                // Connector vectors should be opposite
-                if (dot < -0.7) {
-                  isValidConnection = true;
-                  score = -dot;
-                }
-              } else if (c.id === "E" && targetConnCandidate.id === "A") {
-                // LH Corner E (front panel) connects to A (side)
-                // Corner's front wall should align with standard's left wall
-                // At rot=90: E moves to left side with normal (-1,0) - matches A!
-                // When walls align, connector normals are parallel (dot ≈ 1)
-                if (rot === 90 && dot > 0.7) {
-                  isValidConnection = true;
-                  score = 1 - dot;
-                }
-              } else if (c.id === "A" && targetConnCandidate.id === "E") {
-                // Standard A connects to LH Corner E (front panel)
-                // Same logic: corner's front wall should align with standard's left wall
-                if (rot === 90 && dot > 0.7) {
-                  isValidConnection = true;
-                  score = 1 - dot;
-                }
-              } else if (c.id === "F" && targetConnCandidate.id === "B") {
-                // LH Corner F (side) connects to B (side)
-                // Connector vectors should be opposite
-                if (dot < -0.7) {
-                  isValidConnection = true;
-                  score = -dot;
-                }
-              } else if (c.id === "B" && targetConnCandidate.id === "F") {
-                // Standard B connects to LH Corner F (side)
-                // Connector vectors should be opposite
-                if (dot < -0.7) {
-                  isValidConnection = true;
-                  score = -dot;
-                }
-              } else if ((c.id === "A" || c.id === "B") && (targetConnCandidate.id === "A" || targetConnCandidate.id === "B")) {
-                // Standard to standard: opposite connector directions
-                if (dot < -0.7) {
-                  isValidConnection = true;
-                  score = -dot;
-                }
-              } else if ((c.id === "C" || c.id === "D" || c.id === "E" || c.id === "F") && 
-                         (targetConnCandidate.id === "C" || targetConnCandidate.id === "D" || targetConnCandidate.id === "E" || targetConnCandidate.id === "F")) {
-                // Corner to corner: connectors perpendicular
-                if (Math.abs(dot) < 0.3) {
-                  isValidConnection = true;
-                  score = Math.abs(dot);
-                }
-              }
-              
-              if (!isValidConnection) continue;
-              
-              const totalScore = score;
-              
-              if (!best || totalScore < best.score) {
-                best = { rot, conn: c.id, x, y, score: totalScore };
               }
             }
           }
