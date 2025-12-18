@@ -14,6 +14,7 @@ import {
   PlacedUnit,
   Connection,
   ConnectorId,
+  ConnectorDef,
   Rotation,
   FrontFeature,
 } from "./types";
@@ -669,6 +670,7 @@ export default function StableConfigurator() {
 
   // Find nearest available connector within snap distance
   // Checks if any connector of the dragged module (at position x, y, rot) is near any available connector
+  // Also verifies that the connecting walls are parallel for corner connections
   // excludeUid: optional UID to exclude from search (useful when dragging existing unit)
   function findNearestConnector(
     moduleId: string,
@@ -683,14 +685,19 @@ export default function StableConfigurator() {
     const draggedMod = getModule(moduleId);
     
     // Get all connector positions for the dragged module at this position/rotation
-    const draggedConnectors: Array<{ x: number; y: number; connId: ConnectorId }> = [];
+    const draggedConnectors: Array<{ x: number; y: number; connId: ConnectorId; connDef: ConnectorDef }> = [];
     for (const conn of draggedMod.connectors) {
       const connWorld = connectorWorld(
         { uid: "temp", moduleId, xFt: x, yFt: y, rot, selectedExtras: [] },
         draggedMod,
         conn
       );
-      draggedConnectors.push({ x: connWorld.x, y: connWorld.y, connId: conn.id });
+      draggedConnectors.push({ 
+        x: connWorld.x, 
+        y: connWorld.y, 
+        connId: conn.id,
+        connDef: conn
+      });
     }
 
     // Check each dragged connector against all available connectors on other units
@@ -714,8 +721,30 @@ export default function StableConfigurator() {
           const dist = Math.sqrt(dx * dx + dy * dy);
           
           // Strict snap: must be within 2ft (no tolerance)
-          if (dist < snapDistFt && (!nearest || dist < nearest.distance)) {
-            nearest = { uid: u.uid, connId: conn.id, distance: dist };
+          if (dist < snapDistFt) {
+            // For corner connections, verify that walls are parallel
+            const isCornerConnection = 
+              (draggedConn.connId === "C" || draggedConn.connId === "D" || draggedConn.connId === "E" || draggedConn.connId === "F") ||
+              (conn.id === "C" || conn.id === "D" || conn.id === "E" || conn.id === "F");
+            
+            if (isCornerConnection) {
+              // Check if connecting walls are parallel
+              const draggedWallDir = getConnectorWallDirection(
+                draggedConn.connDef.nx,
+                draggedConn.connDef.ny,
+                rot
+              );
+              const targetWallDir = getConnectorWallDirection(conn.nx, conn.ny, u.rot);
+              
+              // Only consider this connection if walls are parallel
+              if (draggedWallDir !== targetWallDir) {
+                continue;
+              }
+            }
+            
+            if (!nearest || dist < nearest.distance) {
+              nearest = { uid: u.uid, connId: conn.id, distance: dist };
+            }
           }
         }
       }
