@@ -813,7 +813,55 @@ export default function StableConfigurator() {
     return true;
   }
 
-  function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUnit) {
+  // Calculate wall offset to position modules alongside each other based on connector normals
+// After aligning connector points, this offsets the module so walls touch instead of overlapping
+// Returns offset in x and y directions
+function calculateWallOffset(
+  sourceNormal: { nx: number; ny: number },
+  targetNormal: { nx: number; ny: number },
+  sourceSize: { w: number; d: number },
+  rot: Rotation
+): { offsetX: number; offsetY: number } {
+  const { w, d } = rotatedSize(sourceSize.w, sourceSize.d, rot);
+  
+  // Check if normals are opposite (side-to-side connection)
+  const dot = sourceNormal.nx * targetNormal.nx + sourceNormal.ny * targetNormal.ny;
+  const isOpposite = dot < -0.7;
+  
+  if (isOpposite) {
+    // Side-to-side: offset in direction of target normal by source module's dimension
+    // This moves the source module so its wall touches the target module's wall
+    if (Math.abs(targetNormal.nx) > Math.abs(targetNormal.ny)) {
+      // Horizontal connection: offset by width in direction of target normal
+      return { offsetX: targetNormal.nx * w, offsetY: 0 };
+    } else {
+      // Vertical connection: offset by depth in direction of target normal
+      return { offsetX: 0, offsetY: targetNormal.ny * d };
+    }
+  } else {
+    // Front-to-side: offset perpendicular to source normal (front connector)
+    // For E→A or C→B: source normal is vertical (0, 1), offset horizontally
+    // Determine offset direction based on which side the front connector is on
+    if (Math.abs(sourceNormal.nx) > Math.abs(sourceNormal.ny)) {
+      // Source connector is horizontal (side), offset vertically
+      // This shouldn't happen for front-to-side, but handle it
+      return { offsetX: 0, offsetY: sourceNormal.ny * d };
+    } else {
+      // Source connector is vertical (front), offset horizontally
+      // Offset in direction opposite to where the front connector would connect
+      // For E→A: E is front (0, 1), A is left (-1, 0), offset left by width
+      // For C→B: C is front (0, 1), B is right (1, 0), offset right by width
+      // Use target normal to determine direction
+      if (Math.abs(targetNormal.nx) > Math.abs(targetNormal.ny)) {
+        return { offsetX: targetNormal.nx * w, offsetY: 0 };
+      } else {
+        return { offsetX: targetNormal.nx * w, offsetY: 0 };
+      }
+    }
+  }
+}
+
+function attach(moduleId: string, targetConn: ConnectorId, targetUnit?: PlacedUnit) {
     const sourceUnit = targetUnit || selected;
     if (!sourceUnit) return;
 
@@ -865,8 +913,10 @@ export default function StableConfigurator() {
           let x = aW.x - p.x;
           let y = aW.y - p.y;
           
-          // For side-to-side connections, ensure connector normals are opposite (pointing toward each other)
-          // F→B and A→D are side-to-side, so normals should be opposite
+          // Check if connector normals allow connection
+          const dot = v.nx * aW.nx + v.ny * aW.ny;
+          
+          // For side-to-side connections (A↔D, B↔F), normals must be opposite
           const isSideToSide = 
             (c.id === "F" && targetConnCandidate.id === "B") ||
             (c.id === "B" && targetConnCandidate.id === "F") ||
@@ -874,47 +924,17 @@ export default function StableConfigurator() {
             (c.id === "D" && targetConnCandidate.id === "A");
           
           if (isSideToSide) {
-            // Check if connector normals are opposite (pointing toward each other)
-            const dot = v.nx * aW.nx + v.ny * aW.ny;
+            // Side-to-side: normals must be opposite (pointing toward each other)
             if (dot >= -0.7) {
-              // Normals are not opposite enough, skip this rotation
-              continue;
-            }
-            
-            // For side-to-side, position alongside (not overlapping)
-            if ((c.id === "F" && targetConnCandidate.id === "B") ||
-                (c.id === "B" && targetConnCandidate.id === "F")) {
-              // F→B: Corner's left side (F) connects to standard's right side (B)
-              // Position corner so its left edge touches standard's right edge
-              const standardRightEdge = sourceUnit.xFt + aMod.widthFt;
-              x = standardRightEdge; // Corner's left edge at standard's right edge (walls touch)
-            } else if ((c.id === "A" && targetConnCandidate.id === "D") ||
-                       (c.id === "D" && targetConnCandidate.id === "A")) {
-              // A→D: Standard's left side (A) connects to corner's right side (D)
-              // Position corner so its right edge touches standard's left edge
-              const { w } = rotatedSize(newMod.widthFt, newMod.depthFt, rot);
-              const standardLeftEdge = sourceUnit.xFt;
-              x = standardLeftEdge - w; // Corner's right edge at standard's left edge (walls touch)
+              continue; // Skip this rotation - normals not opposite
             }
           }
           
-          // For front-to-side connections, ensure corner sits alongside standard (not overlapping)
-          // E→A: corner should be to the left of standard (corner's right edge touches standard's left edge)
-          // C→B: corner should be to the right of standard (corner's left edge touches standard's right edge)
-          if ((c.id === "E" && targetConnCandidate.id === "A") || 
-              (c.id === "A" && targetConnCandidate.id === "E")) {
-            // E→A: Position corner to the left of standard
-            const { w } = rotatedSize(newMod.widthFt, newMod.depthFt, rot);
-            // A connector is at x=0 on standard, so standard's left edge is at sourceUnit.xFt
-            const standardLeftEdge = sourceUnit.xFt;
-            x = standardLeftEdge - w; // Corner's right edge at standard's left edge
-          } else if ((c.id === "C" && targetConnCandidate.id === "B") ||
-                     (c.id === "B" && targetConnCandidate.id === "C")) {
-            // C→B: Position corner to the right of standard
-            // B connector is at x=w on standard, so standard's right edge is at sourceUnit.xFt + aMod.widthFt
-            const standardRightEdge = sourceUnit.xFt + aMod.widthFt;
-            x = standardRightEdge; // Corner's left edge at standard's right edge
-          }
+          // Calculate wall offset to position modules alongside each other
+          // This works for both side-to-side and front-to-side connections
+          const wallOffset = calculateWallOffset(v, aW, { w: newMod.widthFt, d: newMod.depthFt }, rot);
+          x += wallOffset.offsetX;
+          y += wallOffset.offsetY;
           
           // Calculate distance between connector points after positioning
           // This should be close to 0 when connectors are properly aligned
@@ -1065,7 +1085,7 @@ export default function StableConfigurator() {
         // Check connector normal alignment
         const dot = v.nx * aW.nx + v.ny * aW.ny;
         
-        // For side-to-side connections (F→B, A→D), normals must be opposite (pointing toward each other)
+        // For side-to-side connections (A↔D, B↔F), normals must be opposite
         const isSideToSide = 
           (c.id === "F" && targetConn === "B") ||
           (c.id === "B" && targetConn === "F") ||
@@ -1073,39 +1093,17 @@ export default function StableConfigurator() {
           (c.id === "D" && targetConn === "A");
         
         if (isSideToSide) {
-          // Side-to-side: normals must be opposite (dot < -0.7)
+          // Side-to-side: normals must be opposite (pointing toward each other)
           if (dot >= -0.7) {
             continue; // Skip this rotation - normals not opposite
           }
-          
-          // Position alongside (walls touching)
-          if ((c.id === "F" && targetConn === "B") ||
-              (c.id === "B" && targetConn === "F")) {
-            // F→B: Corner's left side (F) connects to standard's right side (B)
-            const standardRightEdge = targetUnit.xFt + targetMod.widthFt;
-            x = standardRightEdge; // Corner's left edge at standard's right edge
-          } else if ((c.id === "A" && targetConn === "D") ||
-                     (c.id === "D" && targetConn === "A")) {
-            // A→D: Standard's left side (A) connects to corner's right side (D)
-            const { w } = rotatedSize(unitMod.widthFt, unitMod.depthFt, rot);
-            const standardLeftEdge = targetUnit.xFt;
-            x = standardLeftEdge - w; // Corner's right edge at standard's left edge
-          }
         }
         
-        // For front-to-side connections, ensure corner sits alongside standard (not overlapping)
-        if ((c.id === "E" && targetConn === "A") || 
-            (c.id === "A" && targetConn === "E")) {
-          // E→A: Position corner to the left of standard
-          const { w } = rotatedSize(unitMod.widthFt, unitMod.depthFt, rot);
-          const standardLeftEdge = targetUnit.xFt;
-          x = standardLeftEdge - w;
-        } else if ((c.id === "C" && targetConn === "B") ||
-                   (c.id === "B" && targetConn === "C")) {
-          // C→B: Position corner to the right of standard
-          const standardRightEdge = targetUnit.xFt + targetMod.widthFt;
-          x = standardRightEdge;
-        }
+        // Calculate wall offset to position modules alongside each other
+        // This works for both side-to-side and front-to-side connections
+        const wallOffset = calculateWallOffset(v, aW, { w: unitMod.widthFt, d: unitMod.depthFt }, rot);
+        x += wallOffset.offsetX;
+        y += wallOffset.offsetY;
         
         // Calculate distance between connector points after positioning
         const connDist = Math.sqrt((x + p.x - aW.x) ** 2 + (y + p.y - aW.y) ** 2);
@@ -1648,7 +1646,7 @@ export default function StableConfigurator() {
               // Check connector normal alignment
               const dot = v.nx * aW.nx + v.ny * aW.ny;
               
-              // For side-to-side connections (F→B, A→D), normals must be opposite (pointing toward each other)
+              // For side-to-side connections (A↔D, B↔F), normals must be opposite
               const isSideToSide = 
                 (c.id === "F" && targetConnCandidate.id === "B") ||
                 (c.id === "B" && targetConnCandidate.id === "F") ||
@@ -1656,39 +1654,17 @@ export default function StableConfigurator() {
                 (c.id === "D" && targetConnCandidate.id === "A");
               
               if (isSideToSide) {
-                // Side-to-side: normals must be opposite (dot < -0.7)
+                // Side-to-side: normals must be opposite (pointing toward each other)
                 if (dot >= -0.7) {
                   continue; // Skip this rotation - normals not opposite
                 }
-                
-                // Position alongside (walls touching)
-                if ((c.id === "F" && targetConnCandidate.id === "B") ||
-                    (c.id === "B" && targetConnCandidate.id === "F")) {
-                  // F→B: Corner's left side (F) connects to standard's right side (B)
-                  const standardRightEdge = targetUnit.xFt + targetMod.widthFt;
-                  x = standardRightEdge; // Corner's left edge at standard's right edge
-                } else if ((c.id === "A" && targetConnCandidate.id === "D") ||
-                           (c.id === "D" && targetConnCandidate.id === "A")) {
-                  // A→D: Standard's left side (A) connects to corner's right side (D)
-                  const { w } = rotatedSize(m.widthFt, m.depthFt, rot);
-                  const standardLeftEdge = targetUnit.xFt;
-                  x = standardLeftEdge - w; // Corner's right edge at standard's left edge
-                }
               }
               
-              // For front-to-side connections, ensure corner sits alongside standard (not overlapping)
-              if ((c.id === "E" && targetConnCandidate.id === "A") || 
-                  (c.id === "A" && targetConnCandidate.id === "E")) {
-                // E→A: Position corner to the left of standard
-                const { w } = rotatedSize(m.widthFt, m.depthFt, rot);
-                const standardLeftEdge = targetUnit.xFt;
-                x = standardLeftEdge - w;
-              } else if ((c.id === "C" && targetConnCandidate.id === "B") ||
-                         (c.id === "B" && targetConnCandidate.id === "C")) {
-                // C→B: Position corner to the right of standard
-                const standardRightEdge = targetUnit.xFt + targetMod.widthFt;
-                x = standardRightEdge;
-              }
+              // Calculate wall offset to position modules alongside each other
+              // This works for both side-to-side and front-to-side connections
+              const wallOffset = calculateWallOffset(v, aW, { w: m.widthFt, d: m.depthFt }, rot);
+              x += wallOffset.offsetX;
+              y += wallOffset.offsetY;
               
               // Calculate distance between connector points after positioning
               const connDist = Math.sqrt((x + p.x - aW.x) ** 2 + (y + p.y - aW.y) ** 2);
