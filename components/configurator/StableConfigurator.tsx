@@ -684,8 +684,8 @@ export default function StableConfigurator() {
     
     const draggedMod = getModule(moduleId);
     
-    // Get all connector positions for the dragged module at this position/rotation
-    const draggedConnectors: Array<{ x: number; y: number; connId: ConnectorId; connDef: ConnectorDef }> = [];
+    // Get all connector positions and rotated normals for the dragged module at this position/rotation
+    const draggedConnectors: Array<{ x: number; y: number; connId: ConnectorId; nx: number; ny: number }> = [];
     for (const conn of draggedMod.connectors) {
       const connWorld = connectorWorld(
         { uid: "temp", moduleId, xFt: x, yFt: y, rot, selectedExtras: [] },
@@ -696,7 +696,8 @@ export default function StableConfigurator() {
         x: connWorld.x, 
         y: connWorld.y, 
         connId: conn.id,
-        connDef: conn
+        nx: connWorld.nx,
+        ny: connWorld.ny
       });
     }
 
@@ -716,6 +717,22 @@ export default function StableConfigurator() {
           }
           
           const connWorld = connectorWorld(u, m, conn);
+          
+          // Check normal alignment for side-to-side connections
+          const isSideToSide = 
+            (draggedConn.connId === "F" && conn.id === "B") ||
+            (draggedConn.connId === "B" && conn.id === "F") ||
+            (draggedConn.connId === "A" && conn.id === "D") ||
+            (draggedConn.connId === "D" && conn.id === "A");
+          
+          if (isSideToSide) {
+            // For side-to-side, normals must be opposite (pointing toward each other)
+            const dot = draggedConn.nx * connWorld.nx + draggedConn.ny * connWorld.ny;
+            if (dot >= -0.7) {
+              continue; // Skip - normals not opposite
+            }
+          }
+          
           const dx = connWorld.x - draggedConn.x;
           const dy = connWorld.y - draggedConn.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
